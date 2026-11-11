@@ -15,7 +15,12 @@ struct PDFCanvasView: UIViewRepresentable {
         view.backgroundColor = .secondarySystemBackground
         view.pageOverlayViewProvider = context.coordinator
         view.isInMarkupMode = true
+        // PDFKit의 페이지 접근성 요소 조회가 렌더링과 같은 CGPDFPage 락을 재진입해 크래시를 일으키므로
+        // 페이지 하위 요소를 접근성 트리에서 제외한다. 필기 캔버스는 PencilKit이 별도로 노출한다.
+        view.accessibilityElementsHidden = true
+        view.accessibilityIdentifier = "editor.pdfView"
         context.coordinator.pdfView = view
+        view.onDidMoveToWindow = { [weak coordinator = context.coordinator] in coordinator?.showToolPickerIfPossible() }
 
         NotificationCenter.default.addObserver(
             context.coordinator, selector: #selector(Coordinator.pageChanged), name: .PDFViewPageChanged, object: view)
@@ -50,6 +55,7 @@ struct PDFCanvasView: UIViewRepresentable {
 
         init(model: EditorModel) {
             self.model = model
+            super.init()
         }
 
         // MARK: Apply model state
@@ -60,11 +66,13 @@ struct PDFCanvasView: UIViewRepresentable {
             if appliedStructureVersion != model.structureVersion {
                 appliedStructureVersion = model.structureVersion
                 let targetIndex = model.currentPageIndex
+                let previousScale = pdfView.document == nil ? nil : pdfView.scaleFactor
                 canvases.removeAll()
                 pageForCanvas.removeAll()
                 pdfView.document = nil
                 pdfView.document = document.pdfDocument
                 configureScale(pdfView)
+                if let previousScale, !model.isWhiteboard { pdfView.scaleFactor = previousScale }
                 if let page = document.pdfDocument.page(at: targetIndex) { pdfView.go(to: page) }
                 appliedNavigationToken = model.navigationToken
             }
@@ -85,10 +93,25 @@ struct PDFCanvasView: UIViewRepresentable {
                 applyPlayback(filter)
             }
 
-            if !didShowToolPicker, pdfView.window != nil {
-                didShowToolPicker = true
-                toolPicker.setVisible(true, forFirstResponder: pdfView)
-                pdfView.becomeFirstResponder()
+            showToolPickerIfPossible()
+        }
+
+        func showToolPickerIfPossible() {
+            guard !didShowToolPicker, let pdfView, pdfView.window != nil else { return }
+            didShowToolPicker = true
+            toolPicker.setVisible(true, forFirstResponder: pdfView)
+            pdfView.becomeFirstResponder()
+            focusCurrentCanvas()
+        }
+
+        /// 현재 페이지의 캔버스를 첫 응답자로 만들어 도구 피커가 보이게 한다.
+        /// SwiftUI 호스팅 환경에서는 PDFView 자체의 첫 응답자 상태가 곧 풀리므로 캔버스를 사용한다.
+        func focusCurrentCanvas() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let pdfView = self.pdfView else { return }
+                if self.canvases.values.contains(where: { $0.isFirstResponder }) { return }
+                let target = pdfView.currentPage.flatMap { self.canvases[$0] } ?? self.canvases.values.first
+                target?.becomeFirstResponder()
             }
         }
 
@@ -143,6 +166,7 @@ struct PDFCanvasView: UIViewRepresentable {
 
             canvases[page] = canvas
             pageForCanvas[ObjectIdentifier(canvas)] = page
+            if didShowToolPicker { focusCurrentCanvas() }
             return canvas
         }
 
@@ -151,6 +175,7 @@ struct PDFCanvasView: UIViewRepresentable {
             toolPicker.removeObserver(canvas)
             canvases[page] = nil
             pageForCanvas[ObjectIdentifier(canvas)] = nil
+            if canvas.isFirstResponder { focusCurrentCanvas() }
         }
 
         // MARK: PKCanvasViewDelegate
@@ -166,5 +191,10 @@ struct PDFCanvasView: UIViewRepresentable {
 
 /// 도구 피커를 붙이기 위해 첫 응답자가 될 수 있는 PDFView.
 final class ResponderPDFView: PDFView {
+    var onDidMoveToWindow: (() -> Void)?
     override var canBecomeFirstResponder: Bool { true }
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil { onDidMoveToWindow?() }
+    }
 }

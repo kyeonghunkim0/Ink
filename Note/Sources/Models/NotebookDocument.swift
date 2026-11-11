@@ -43,9 +43,17 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
     }
 
     func markPDFChanged() {
+        normalizePDF()
         pdfDirty = true
         thumbnailDirty = true
         touch()
+    }
+
+    /// 다른 문서에서 가져온 페이지가 섞이지 않도록 PDF를 직렬화해 단일 CGPDFDocument로 다시 만든다.
+    /// PDFKit은 서로 다른 문서에 속한 페이지가 섞이면 렌더링/접근성 경로에서 불안정하다.
+    private func normalizePDF() {
+        guard let data = pdfDocument.dataRepresentation(), let fresh = PDFDocument(data: data) else { return }
+        pdfDocument = fresh
     }
 
     func markManifestChanged() {

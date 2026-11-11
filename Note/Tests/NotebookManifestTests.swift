@@ -6,6 +6,9 @@ import PDFKit
 struct NotebookManifestTests {
     @Test func roundTripsThroughJSON() throws {
         var manifest = NotebookManifest(title: "테스트")
+        // ISO8601은 초 단위까지만 저장하므로 비교를 위해 정수 초로 맞춘다.
+        manifest.createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        manifest.modifiedAt = manifest.createdAt
         manifest.pages = [PageInfo(template: .lined), PageInfo(template: nil)]
         manifest.recordings = [RecordingInfo(title: "녹음 1", startedAt: Date(timeIntervalSince1970: 1000), duration: 12.5, pageID: manifest.pages[0].id)]
         let data = try manifest.encoded()

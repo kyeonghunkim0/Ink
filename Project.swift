@@ -91,13 +91,23 @@ let project = Project(
             sources: ["Note/Tests/**"],
             dependencies: [.target(name: "Note")]
         ),
+        .target(
+            name: "NoteUITests",
+            destinations: [.iPad],
+            product: .uiTests,
+            bundleId: "\(bundleIDPrefix).NoteUITests",
+            deploymentTargets: .iOS("26.0"),
+            infoPlist: .default,
+            sources: ["Note/UITests/**"],
+            dependencies: [.target(name: "Note")]
+        ),
     ],
     schemes: [
         .scheme(
             name: "Note",
             shared: true,
             buildAction: .buildAction(targets: ["Note"]),
-            testAction: .targets(["NoteTests"]),
+            testAction: .targets(["NoteTests", "NoteUITests"]),
             runAction: .runAction(executable: "Note")
         ),
     ]

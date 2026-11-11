@@ -36,7 +36,7 @@ final class EditorModel {
     private(set) var navigationToken = 0
     /// 페이지별 필기 변경 횟수. 썸네일 갱신에 사용.
     private(set) var drawingVersions: [UUID: Int] = [:]
-    var isFingerDrawingEnabled = false
+    var isFingerDrawingEnabled = CommandLine.arguments.contains("--finger")
     var errorMessage: String?
 
     let recorder = AudioRecorder()
@@ -67,6 +67,11 @@ final class EditorModel {
         if ok {
             document = doc
             isLoaded = true
+            #if DEBUG
+            if CommandLine.arguments.contains("--open-sample"), doc.manifest.pages.count == 1 {
+                insertDebugStrokes(into: doc)
+            }
+            #endif
         } else {
             loadError = "노트를 열 수 없습니다."
         }
@@ -221,3 +226,38 @@ final class EditorModel {
         }
     }
 }
+
+#if DEBUG
+import PencilKit
+
+extension EditorModel {
+    /// 시뮬레이터 검증용 샘플 스트로크와 페이지.
+    fileprivate func insertDebugStrokes(into doc: NotebookDocument) {
+        let ink = PKInk(.pen, color: .systemBlue)
+        func stroke(_ points: [CGPoint], start: Date) -> PKStroke {
+            let pts = points.map {
+                PKStrokePoint(location: $0, timeOffset: 0, size: CGSize(width: 4, height: 4), opacity: 1, force: 1, azimuth: 0, altitude: .pi / 2)
+            }
+            return PKStroke(ink: ink, path: PKStrokePath(controlPoints: pts, creationDate: start))
+        }
+        var pts: [CGPoint] = []
+        for i in 0..<200 {
+            let t = CGFloat(i) / 200
+            pts.append(CGPoint(x: 80 + t * 400, y: 200 + sin(t * .pi * 4) * 60))
+        }
+        let drawing = PKDrawing(strokes: [
+            stroke(pts, start: Date()),
+            stroke([CGPoint(x: 100, y: 400), CGPoint(x: 300, y: 500), CGPoint(x: 100, y: 600)], start: Date()),
+        ])
+        if let id = pageID(at: 0) {
+            doc.setDrawing(drawing, for: id)
+            drawingVersions[id, default: 0] += 1
+        }
+        if !isWhiteboard {
+            doc.insertTemplatePage(.grid, at: 1)
+            doc.insertTemplatePage(.cornell, at: 2)
+            structureVersion += 1
+        }
+    }
+}
+#endif

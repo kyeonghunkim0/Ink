@@ -85,6 +85,22 @@ struct NotebookGridView: View {
             }
         }
         .task(id: store.changeCounter) { items = store.items(in: folder) }
+        .task { await openDebugSampleIfRequested() }
+    }
+
+    /// `--open-sample` 실행 인자가 있으면 샘플 노트를 만들어 바로 연다(시뮬레이터 검증용).
+    private func openDebugSampleIfRequested() async {
+        #if DEBUG
+        guard CommandLine.arguments.contains("--open-sample"), folder == store.rootURL else { return }
+        for item in store.items(in: folder) where item.name.hasPrefix("샘플") {
+            try? store.delete(item)
+        }
+        var options = NewNotebookOptions()
+        options.title = "샘플"
+        options.template = CommandLine.arguments.contains("--grid") ? .grid : .lined
+        if CommandLine.arguments.contains("--whiteboard") { options.kind = .whiteboard }
+        await create(options)
+        #endif
     }
 
     @ToolbarContentBuilder
@@ -109,14 +125,14 @@ struct NotebookGridView: View {
         guard !item.isDownloading else { return }
         switch item.kind {
         case .folder: router.navigate(to: .folder(item.url))
-        case .notebook: router.navigate(to: .editor(item.url))
+        case .notebook: router.openEditor(item.url)
         }
     }
 
     private func create(_ options: NewNotebookOptions) async {
         do {
             let url = try await store.createNotebook(options, in: folder)
-            router.navigate(to: .editor(url))
+            router.openEditor(url)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -129,7 +145,7 @@ struct NotebookGridView: View {
         for url in urls {
             do { lastURL = try await store.importFile(at: url, in: folder) } catch { errorMessage = error.localizedDescription }
         }
-        if urls.count == 1, let lastURL { router.navigate(to: .editor(lastURL)) }
+        if urls.count == 1, let lastURL { router.openEditor(lastURL) }
     }
 
     private func attempt(_ body: () throws -> Void) {
