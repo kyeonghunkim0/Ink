@@ -46,3 +46,66 @@ final class EditorUITests: XCTestCase {
         attach("03-library")
     }
 }
+
+final class WhiteboardAndRecordingUITests: XCTestCase {
+    private func launch(_ args: [String]) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = args
+        app.launch()
+        return app
+    }
+
+    private func attach(_ app: XCUIApplication, _ name: String) {
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = name
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
+    func testWhiteboardDrawing() {
+        let app = launch(["--open-sample", "--whiteboard", "--finger"])
+        XCTAssertTrue(app.navigationBars.staticTexts["샘플"].waitForExistence(timeout: 10))
+        sleep(2)
+        let window = app.windows.firstMatch
+        let a = window.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.4))
+        let b = window.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.7))
+        a.press(forDuration: 0.05, thenDragTo: b, withVelocity: .slow, thenHoldForDuration: 0.05)
+        sleep(1)
+        attach(app, "whiteboard-after-draw")
+        XCTAssertFalse(app.staticTexts["1 / 1"].exists, "화이트보드는 페이지 표시가 없어야 한다")
+    }
+
+    func testRecordPlaybackAndExport() {
+        let app = launch(["--open-sample", "--finger"])
+        XCTAssertTrue(app.navigationBars.staticTexts["샘플"].waitForExistence(timeout: 10))
+        sleep(2)
+
+        app.buttons["녹음"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["정지"].waitForExistence(timeout: 5))
+        let window = app.windows.firstMatch
+        let a = window.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5))
+        let b = window.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.6))
+        a.press(forDuration: 0.05, thenDragTo: b, withVelocity: .slow, thenHoldForDuration: 0.05)
+        sleep(2)
+        attach(app, "recording")
+        app.buttons["정지"].firstMatch.tap()
+        XCTAssertFalse(app.buttons["정지"].waitForExistence(timeout: 2))
+
+        app.buttons["녹음 목록"].firstMatch.tap()
+        let item = app.buttons.matching(NSPredicate(format: "label BEGINSWITH '녹음 1'")).firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 5))
+        item.tap()
+        XCTAssertTrue(app.sliders.firstMatch.waitForExistence(timeout: 5))
+        sleep(1)
+        attach(app, "playback")
+
+        app.buttons["공유"].firstMatch.tap()
+        let pdfAll = app.buttons["PDF로 내보내기 (전체)"].firstMatch
+        XCTAssertTrue(pdfAll.waitForExistence(timeout: 5))
+        pdfAll.tap()
+        // 공유 시트가 뜨는지 확인한 뒤 닫는다.
+        let sheet = app.otherElements["ActivityListView"].firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 10))
+        attach(app, "share-sheet")
+    }
+}

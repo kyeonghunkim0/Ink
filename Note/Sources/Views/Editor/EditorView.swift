@@ -39,21 +39,20 @@ struct EditorContent: View {
     @State private var isExporting = false
 
     var body: some View {
-        ZStack(alignment: .top) {
+        // 도구 피커가 하단에 떠 있으므로 보조 UI는 캔버스 위쪽에 둔다.
+        VStack(spacing: 10) {
+            if showThumbnails && !model.isWhiteboard {
+                PageThumbnailStrip(model: model)
+                    .padding(.top, 8)
+            }
+            if model.recorder.isRecording || model.recorder.playingRecordingID != nil {
+                RecordingBar(model: model)
+                    .padding(.top, showThumbnails && !model.isWhiteboard ? 0 : 8)
+            }
             PDFCanvasView(model: model)
                 .ignoresSafeArea(edges: .bottom)
-
-            // 도구 피커가 하단에 떠 있으므로 보조 UI는 상단에 둔다.
-            VStack(spacing: 10) {
-                if showThumbnails && !model.isWhiteboard {
-                    PageThumbnailStrip(model: model)
-                }
-                if model.recorder.isRecording || model.recorder.playingRecordingID != nil {
-                    RecordingBar(model: model)
-                }
-            }
-            .padding(.top, 8)
         }
+        .background(Color(.secondarySystemBackground))
         .navigationTitle(model.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }

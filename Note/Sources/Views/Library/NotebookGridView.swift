@@ -91,7 +91,14 @@ struct NotebookGridView: View {
     /// `--open-sample` 실행 인자가 있으면 샘플 노트를 만들어 바로 연다(시뮬레이터 검증용).
     private func openDebugSampleIfRequested() async {
         #if DEBUG
-        guard CommandLine.arguments.contains("--open-sample"), folder == store.rootURL else { return }
+        guard folder == store.rootURL else { return }
+        // `--import <경로>`: 호스트 파일을 바로 가져와 연다(시뮬레이터는 Mac 파일 시스템을 읽을 수 있다).
+        if let i = CommandLine.arguments.firstIndex(of: "--import"), CommandLine.arguments.indices.contains(i + 1) {
+            for item in store.items(in: folder) where item.name.hasPrefix("sample") { try? store.delete(item) }
+            await importFiles([URL(fileURLWithPath: CommandLine.arguments[i + 1])])
+            return
+        }
+        guard CommandLine.arguments.contains("--open-sample") else { return }
         for item in store.items(in: folder) where item.name.hasPrefix("샘플") {
             try? store.delete(item)
         }
