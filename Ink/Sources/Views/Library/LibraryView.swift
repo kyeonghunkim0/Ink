@@ -26,20 +26,14 @@ struct LibraryView: View {
                 }
             }
         }
-        .fullScreenCover(item: $router.presentedNotebook) { url in
-            NavigationStack {
-                EditorView(url: url)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button { router.presentedNotebook = nil } label: { Label("닫기", systemImage: "chevron.left") }
-                        }
-                    }
-            }
+        .fullScreenCover(isPresented: $router.isEditorPresented) {
+            EditorTabsView()
+                .environment(router)
         }
         .onChange(of: selectedFolder) { _, _ in router.popToRoot() }
-        .onChange(of: router.presentedNotebook) { _, url in
-            // 편집기를 닫으면 썸네일·수정일을 다시 읽는다.
-            if url == nil { store.refresh() }
+        .onChange(of: router.isEditorPresented) { _, presented in
+            // 편집기를 내리면 썸네일·수정일을 다시 읽는다.
+            if !presented { store.refresh() }
         }
     }
 }

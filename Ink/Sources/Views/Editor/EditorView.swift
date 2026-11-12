@@ -1,33 +1,89 @@
 import SwiftUI
 import PhotosUI
 
-/// 노트북 편집 화면. 문서를 열고 닫는 책임을 가진다.
+/// 탭으로 열린 노트들을 전체 화면으로 보여 준다.
+struct EditorTabsView: View {
+    @Environment(Router.self) private var router
+
+    var body: some View {
+        @Bindable var router = router
+        return NavigationStack {
+            VStack(spacing: 0) {
+                if router.openNotebooks.count > 1 {
+                    EditorTabStrip()
+                }
+                if let url = router.activeNotebook {
+                    EditorView(model: router.editorModel(for: url))
+                        .id(url)
+                } else {
+                    ContentUnavailableView("열린 노트가 없습니다", systemImage: "doc")
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { router.isEditorPresented = false } label: { Label("닫기", systemImage: "chevron.left") }
+                }
+            }
+        }
+    }
+}
+
+/// 상단 탭 스트립. 탭 전환과 닫기.
+struct EditorTabStrip: View {
+    @Environment(Router.self) private var router
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(router.openNotebooks, id: \.self) { url in
+                    let isActive = url == router.activeNotebook
+                    HStack(spacing: 6) {
+                        Button { router.activeNotebook = url } label: {
+                            Text(url.deletingPathExtension().lastPathComponent)
+                                .font(.callout.weight(isActive ? .semibold : .regular))
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.plain)
+                        Button { router.closeTab(url) } label: {
+                            Image(systemName: "xmark").font(.caption2.bold())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("탭 닫기 \(url.deletingPathExtension().lastPathComponent)")
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(isActive ? Color.accentColor.opacity(0.15) : Color.clear, in: Capsule())
+                    .accessibilityIdentifier("editor.tab")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+        }
+        .scrollIndicators(.hidden)
+        .background(Color(.secondarySystemBackground))
+    }
+}
+
+/// 노트북 편집 화면. 모델은 라우터가 보관하며, 여기서는 로드만 한다.
 struct EditorView: View {
-    let url: URL
-    @State private var model: EditorModel?
+    let model: EditorModel
 
     var body: some View {
         Group {
-            if let model {
-                if model.isLoaded {
-                    EditorContent(model: model)
-                } else if let error = model.loadError {
-                    ContentUnavailableView(error, systemImage: "exclamationmark.triangle")
-                } else {
-                    ProgressView("여는 중…")
-                }
+            if model.isLoaded {
+                EditorContent(model: model)
+            } else if let error = model.loadError {
+                ContentUnavailableView(error, systemImage: "exclamationmark.triangle")
             } else {
                 ProgressView("여는 중…")
             }
         }
         .task {
-            let m = EditorModel(url: url)
-            model = m
-            await m.load()
+            if !model.isLoaded, model.loadError == nil { await model.load() }
         }
         .onDisappear {
-            let m = model
-            Task { await m?.close() }
+            // 탭 전환/백그라운드 시 저장만 하고 문서는 열어 둔다.
+            Task { await model.save() }
         }
     }
 }
@@ -274,6 +330,6 @@ func formatDuration(_ interval: TimeInterval) -> String {
 
 #Preview {
     NavigationStack {
-        EditorView(url: FileManager.default.temporaryDirectory.appendingPathComponent("Preview.inknote"))
+        EditorView(model: EditorModel(url: FileManager.default.temporaryDirectory.appendingPathComponent("Preview.inknote")))
     }
 }

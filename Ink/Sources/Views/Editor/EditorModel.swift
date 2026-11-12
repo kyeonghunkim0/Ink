@@ -78,6 +78,7 @@ final class EditorModel {
     // MARK: - Lifecycle
 
     func load() async {
+        guard document == nil else { return }
         // 앱 컨테이너 밖의 파일(파일 앱에서 열기)은 보안 범위 접근이 필요하다.
         hasSecurityScope = url.startAccessingSecurityScopedResource()
         let doc = NotebookDocument(fileURL: url)
@@ -86,7 +87,7 @@ final class EditorModel {
             document = doc
             isLoaded = true
             #if DEBUG
-            if CommandLine.arguments.contains("--open-sample"), doc.manifest.pages.count == 1 {
+            if CommandLine.arguments.contains("--open-sample"), doc.manifest.title == "샘플", doc.manifest.pages.count == 1 {
                 insertDebugStrokes(into: doc)
             }
             #endif
