@@ -34,7 +34,6 @@ struct PDFCanvasView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(model: model) }
 
     static func dismantleUIView(_ view: ResponderPDFView, coordinator: Coordinator) {
-        coordinator.toolPicker.setVisible(false, forFirstResponder: view)
         NotificationCenter.default.removeObserver(coordinator)
     }
 
@@ -107,8 +106,6 @@ struct PDFCanvasView: UIViewRepresentable {
         func showToolPickerIfPossible() {
             guard !didShowToolPicker, let pdfView, pdfView.window != nil else { return }
             didShowToolPicker = true
-            toolPicker.setVisible(true, forFirstResponder: pdfView)
-            pdfView.becomeFirstResponder()
             focusCurrentCanvas()
         }
 
@@ -208,10 +205,9 @@ struct PDFCanvasView: UIViewRepresentable {
     }
 }
 
-/// 도구 피커를 붙이기 위해 첫 응답자가 될 수 있는 PDFView.
+/// 윈도우에 붙는 시점을 알려주는 PDFView. 첫 응답자는 페이지 캔버스가 맡는다.
 final class ResponderPDFView: PDFView {
     var onDidMoveToWindow: (() -> Void)?
-    override var canBecomeFirstResponder: Bool { true }
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window != nil { onDidMoveToWindow?() }
