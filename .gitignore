@@ -25,3 +25,15 @@ Package.resolved
 
 # Tooling
 .gstack/
+
+# fastlane / bundler
+vendor/
+fastlane/report.xml
+fastlane/test_output/
+fastlane/build/
+fastlane/README.md
+fastlane/.env*
+.env
+*.cer
+*.p12
+*.mobileprovision

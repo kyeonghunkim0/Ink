@@ -6,6 +6,9 @@
 - 프로젝트는 tuist로 생성: `tuist generate` → `Ink.xcworkspace`
 - 빌드: `xcodebuild -workspace Ink.xcworkspace -scheme Ink -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M5)' build`
 - 테스트: 같은 명령에 `test`
+- fastlane: Homebrew Ruby 필요 → `export PATH="/opt/homebrew/opt/ruby/bin:$PATH"` 후 `bundle exec fastlane ios <lane>`
+  - 레인: `build`(시뮬레이터), `test`, `beta`(TestFlight, 환경변수 ASC_KEY_ID/ASC_ISSUER_ID/ASC_KEY_CONTENT 필요)
+  - 버전은 Project.swift의 `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION`에서 읽음 (Info.plist 직접 수정 금지)
 - 스펙/로드맵: ~/.claude/plans/ipados-synchronous-teacup.md
 
 ## 아키텍처

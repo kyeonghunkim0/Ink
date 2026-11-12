@@ -1,0 +1,5 @@
+app_identifier("com.gimgyeonghun.Ink")
+team_id("2N94PZ8R58")
+# App Store Connect 로그인은 API 키(ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_CONTENT)를 쓴다.
+# Apple ID 로그인으로 대체하려면 아래 주석을 풀고 FASTLANE_USER 환경변수를 설정.
+# apple_id(ENV["FASTLANE_USER"])
