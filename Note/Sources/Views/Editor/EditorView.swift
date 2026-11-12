@@ -56,6 +56,15 @@ struct EditorContent: View {
         .navigationTitle(model.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
+        .background {
+            // 키보드 줌 단축키(⌘+ / ⌘-). 보이지 않는 버튼으로 등록한다.
+            Group {
+                Button("확대") { model.zoom(by: 1) }.keyboardShortcut("=", modifiers: .command)
+                Button("축소") { model.zoom(by: -1) }.keyboardShortcut("-", modifiers: .command)
+            }
+            .opacity(0)
+            .accessibilityHidden(true)
+        }
         .sheet(item: $shareItem) { item in
             ShareSheet(items: [item.url])
         }
@@ -92,10 +101,12 @@ struct EditorContent: View {
                 } primaryAction: {
                     model.addPage()
                 }
+                .keyboardShortcut("n", modifiers: .command)
 
                 Button { showThumbnails.toggle() } label: {
                     Label("페이지 목록", systemImage: showThumbnails ? "rectangle.bottomthird.inset.filled" : "rectangle")
                 }
+                .keyboardShortcut("t", modifiers: .command)
             }
 
             Toggle(isOn: $model.isFingerDrawingEnabled) {
@@ -108,6 +119,7 @@ struct EditorContent: View {
                 Label("녹음", systemImage: model.recorder.isRecording ? "stop.circle.fill" : "mic")
             }
             .tint(model.recorder.isRecording ? .red : nil)
+            .keyboardShortcut("r", modifiers: .command)
 
             Menu {
                 Section("녹음") {

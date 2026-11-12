@@ -48,6 +48,7 @@ struct PDFCanvasView: UIViewRepresentable {
         private var pageForCanvas: [ObjectIdentifier: PDFPage] = [:]
         private var appliedStructureVersion = -1
         private var appliedNavigationToken = -1
+        private var appliedZoomToken = 0
         private var appliedPolicy: PKCanvasViewDrawingPolicy?
         private var appliedFilter: PlaybackFilter?
         private var isApplyingPlayback = false
@@ -80,6 +81,12 @@ struct PDFCanvasView: UIViewRepresentable {
             if appliedNavigationToken != model.navigationToken {
                 appliedNavigationToken = model.navigationToken
                 if let page = document.pdfDocument.page(at: model.currentPageIndex) { pdfView.go(to: page) }
+            }
+
+            if appliedZoomToken != model.zoomRequest.token {
+                appliedZoomToken = model.zoomRequest.token
+                let factor: CGFloat = model.zoomRequest.delta > 0 ? 1.25 : 0.8
+                pdfView.scaleFactor = min(max(pdfView.scaleFactor * factor, pdfView.minScaleFactor), pdfView.maxScaleFactor)
             }
 
             if appliedPolicy != model.drawingPolicy {

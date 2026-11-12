@@ -41,6 +41,9 @@ final class EditorModel {
 
     let recorder = AudioRecorder()
     @ObservationIgnored private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var hasSecurityScope = false
+    /// 줌 요청. 양수는 확대, 음수는 축소. 캔버스 뷰가 소비한다.
+    private(set) var zoomRequest: (token: Int, delta: Int) = (0, 0)
 
     init(url: URL) {
         self.url = url
@@ -62,6 +65,8 @@ final class EditorModel {
     // MARK: - Lifecycle
 
     func load() async {
+        // 앱 컨테이너 밖의 파일(파일 앱에서 열기)은 보안 범위 접근이 필요하다.
+        hasSecurityScope = url.startAccessingSecurityScopedResource()
         let doc = NotebookDocument(fileURL: url)
         let ok = await withCheckedContinuation { cont in doc.open { cont.resume(returning: $0) } }
         if ok {
@@ -90,6 +95,11 @@ final class EditorModel {
         guard let document else { return }
         await withCheckedContinuation { cont in document.close { _ in cont.resume() } }
         self.document = nil
+        if hasSecurityScope { url.stopAccessingSecurityScopedResource() }
+    }
+
+    func zoom(by delta: Int) {
+        zoomRequest = (zoomRequest.token + 1, delta)
     }
 
     private func scheduleSave() {

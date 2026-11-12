@@ -3,11 +3,12 @@ import SwiftUI
 /// 라이브러리 루트. 사이드바(폴더) + 노트북 그리드.
 struct LibraryView: View {
     @Environment(DocumentStore.self) private var store
-    @State private var router = Router()
+    @Environment(Router.self) private var router
     @State private var selectedFolder: URL?
 
     var body: some View {
-        NavigationSplitView {
+        @Bindable var router = router
+        return NavigationSplitView {
             FolderSidebar(selection: $selectedFolder)
         } detail: {
             NavigationStack(path: $router.path) {
@@ -24,7 +25,6 @@ struct LibraryView: View {
                     }
                 }
             }
-            .environment(router)
         }
         .fullScreenCover(item: $router.presentedNotebook) { url in
             NavigationStack {
@@ -79,5 +79,5 @@ struct FolderSidebar: View {
 }
 
 #Preview {
-    LibraryView().environment(DocumentStore())
+    LibraryView().environment(DocumentStore()).environment(Router())
 }
