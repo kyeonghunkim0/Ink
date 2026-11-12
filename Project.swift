@@ -1,10 +1,10 @@
 import ProjectDescription
 
 let bundleIDPrefix = "com.gimgyeonghun"
-let iCloudContainer = "iCloud.\(bundleIDPrefix).Note"
+let iCloudContainer = "iCloud.\(bundleIDPrefix).Ink"
 
 let infoPlist: [String: Plist.Value] = [
-    "CFBundleDisplayName": "Note",
+    "CFBundleDisplayName": "Ink",
     "CFBundleShortVersionString": "0.1.0",
     "CFBundleVersion": "1",
     "UILaunchScreen": [:],
@@ -23,33 +23,33 @@ let infoPlist: [String: Plist.Value] = [
     "NSUbiquitousContainers": [
         iCloudContainer: [
             "NSUbiquitousContainerIsDocumentScopePublic": true,
-            "NSUbiquitousContainerName": "Note",
+            "NSUbiquitousContainerName": "Ink",
             "NSUbiquitousContainerSupportedFolderLevels": "Any",
         ],
     ],
     "CFBundleDocumentTypes": [
         [
-            "CFBundleTypeName": "Note Notebook",
+            "CFBundleTypeName": "Ink Notebook",
             "CFBundleTypeRole": "Editor",
             "LSHandlerRank": "Owner",
             "LSTypeIsPackage": true,
-            "LSItemContentTypes": ["\(bundleIDPrefix).note.gnote"],
+            "LSItemContentTypes": ["\(bundleIDPrefix).ink.notebook"],
         ],
     ],
     "UTExportedTypeDeclarations": [
         [
-            "UTTypeIdentifier": "\(bundleIDPrefix).note.gnote",
-            "UTTypeDescription": "Note Notebook",
+            "UTTypeIdentifier": "\(bundleIDPrefix).ink.notebook",
+            "UTTypeDescription": "Ink Notebook",
             "UTTypeConformsTo": ["com.apple.package", "public.composite-content"],
             "UTTypeTagSpecification": [
-                "public.filename-extension": ["gnote"],
+                "public.filename-extension": ["inknote"],
             ],
         ],
     ],
 ]
 
 let project = Project(
-    name: "Note",
+    name: "Ink",
     organizationName: "gimgyeonghun",
     options: .options(
         automaticSchemesOptions: .disabled,
@@ -67,48 +67,48 @@ let project = Project(
     ),
     targets: [
         .target(
-            name: "Note",
+            name: "Ink",
             destinations: [.iPad],
             product: .app,
-            bundleId: "\(bundleIDPrefix).Note",
+            bundleId: "\(bundleIDPrefix).Ink",
             deploymentTargets: .iOS("18.0"),
             infoPlist: .extendingDefault(with: infoPlist),
-            sources: ["Note/Sources/**"],
-            resources: ["Note/Resources/**"],
-            entitlements: .file(path: "Note/Note.entitlements"),
+            sources: ["Ink/Sources/**"],
+            resources: ["Ink/Resources/**"],
+            entitlements: .file(path: "Ink/Ink.entitlements"),
             settings: .settings(base: [
                 "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
                 "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
             ])
         ),
         .target(
-            name: "NoteTests",
+            name: "InkTests",
             destinations: [.iPad],
             product: .unitTests,
-            bundleId: "\(bundleIDPrefix).NoteTests",
+            bundleId: "\(bundleIDPrefix).InkTests",
             deploymentTargets: .iOS("18.0"),
             infoPlist: .default,
-            sources: ["Note/Tests/**"],
-            dependencies: [.target(name: "Note")]
+            sources: ["Ink/Tests/**"],
+            dependencies: [.target(name: "Ink")]
         ),
         .target(
-            name: "NoteUITests",
+            name: "InkUITests",
             destinations: [.iPad],
             product: .uiTests,
-            bundleId: "\(bundleIDPrefix).NoteUITests",
+            bundleId: "\(bundleIDPrefix).InkUITests",
             deploymentTargets: .iOS("18.0"),
             infoPlist: .default,
-            sources: ["Note/UITests/**"],
-            dependencies: [.target(name: "Note")]
+            sources: ["Ink/UITests/**"],
+            dependencies: [.target(name: "Ink")]
         ),
     ],
     schemes: [
         .scheme(
-            name: "Note",
+            name: "Ink",
             shared: true,
-            buildAction: .buildAction(targets: ["Note"]),
-            testAction: .targets(["NoteTests", "NoteUITests"]),
-            runAction: .runAction(executable: "Note")
+            buildAction: .buildAction(targets: ["Ink"]),
+            testAction: .targets(["InkTests", "InkUITests"]),
+            runAction: .runAction(executable: "Ink")
         ),
     ]
 )

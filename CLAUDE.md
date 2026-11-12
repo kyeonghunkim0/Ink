@@ -1,15 +1,16 @@
-# Note — GoodNotes 스타일 iPadOS 노트 앱
+# Ink — GoodNotes 스타일 iPadOS 노트 앱
 
 ## 프로젝트 개요
+- 앱 이름: **Ink** (번들 ID `com.gimgyeonghun.Ink`, iCloud 컨테이너 `iCloud.com.gimgyeonghun.Ink`)
 - iPad 전용, iPadOS 18.0+ (26에서 Liquid Glass 활성화), Swift 6 strict concurrency, SwiftUI + UIKit 브리징
-- 프로젝트는 tuist로 생성: `tuist generate` → `Note.xcworkspace`
-- 빌드: `xcodebuild -workspace Note.xcworkspace -scheme Note -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M5)' build`
+- 프로젝트는 tuist로 생성: `tuist generate` → `Ink.xcworkspace`
+- 빌드: `xcodebuild -workspace Ink.xcworkspace -scheme Ink -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M5)' build`
 - 테스트: 같은 명령에 `test`
 - 스펙/로드맵: ~/.claude/plans/ipados-synchronous-teacup.md
 
 ## 아키텍처
 - Models(Codable 매니페스트, UIDocument) / Services(저장소, 변환, 내보내기, 녹음) / Views(SwiftUI)
-- 문서 = `.gnote` 패키지 디렉터리 (manifest.json, background.pdf, pages/*.drawing, audio/*)
+- 문서 = `.inknote` 패키지 디렉터리 (manifest.json, background.pdf, pages/*.drawing, audio/*)
 - 필기: PencilKit / PDF: PDFKit / Office→PDF: WKWebView + UIPrintPageRenderer / 동기화: iCloud ubiquity 컨테이너
 
 ## 코딩 표준 (스킬 `swiftui` 준수)

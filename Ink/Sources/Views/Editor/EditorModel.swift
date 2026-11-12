@@ -225,7 +225,7 @@ final class EditorModel {
     func export(_ kind: ExportKind) async throws -> URL {
         guard let document else { throw CocoaError(.fileNoSuchFile) }
         await save()
-        let base = title.isEmpty ? "Note" : title
+        let base = title.isEmpty ? "Ink" : title
         switch kind {
         case .pdfAll:
             return try Exporter.writeTemporary(data: Exporter.flattenedPDF(document: document), name: "\(base).pdf")

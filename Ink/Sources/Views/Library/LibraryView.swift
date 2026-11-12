@@ -61,7 +61,7 @@ struct FolderSidebar: View {
                 }
             }
         }
-        .navigationTitle("Note")
+        .navigationTitle("Ink")
         .overlay(alignment: .bottom) {
             if !store.isICloud {
                 Text("iCloud 미연결 · 로컬에 저장됨")

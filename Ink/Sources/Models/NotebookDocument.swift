@@ -3,7 +3,7 @@ import PDFKit
 import PencilKit
 import UniformTypeIdentifiers
 
-/// `.gnote` 패키지 문서. UIKit이 `load(fromContents:)`와 `contents(forType:)`를 메인 큐에서 호출하므로
+/// `.inknote` 패키지 문서. UIKit이 `load(fromContents:)`와 `contents(forType:)`를 메인 큐에서 호출하므로
 /// 내부 상태는 메인 스레드에서만 접근한다(UIDocument는 nonisolated 클래스라 컴파일러가 강제하지 않는다).
 final class NotebookDocument: UIDocument, @unchecked Sendable {
     var manifest: NotebookManifest

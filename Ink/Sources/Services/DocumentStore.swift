@@ -27,7 +27,7 @@ struct NewNotebookOptions: Sendable {
     var isLandscape = false
 }
 
-/// iCloud(또는 로컬 폴백) 문서 저장소. 폴더는 실제 디렉터리, 노트북은 `.gnote` 패키지다.
+/// iCloud(또는 로컬 폴백) 문서 저장소. 폴더는 실제 디렉터리, 노트북은 `.inknote` 패키지다.
 @MainActor
 @Observable
 final class DocumentStore {

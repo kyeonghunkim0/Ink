@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import PDFKit
-@testable import Note
+@testable import Ink
 
 struct NotebookManifestTests {
     @Test func roundTripsThroughJSON() throws {

@@ -99,7 +99,7 @@ struct RecordingInfo: Codable, Identifiable, Hashable, Sendable {
     var fileName: String { "\(id.uuidString).m4a" }
 }
 
-/// `.gnote` 패키지의 `manifest.json`.
+/// `.inknote` 패키지의 `manifest.json`.
 struct NotebookManifest: Codable, Hashable, Sendable {
     static let currentVersion = 1
 
@@ -140,8 +140,8 @@ struct NotebookManifest: Codable, Hashable, Sendable {
 
 /// 패키지 내부 경로 상수.
 enum NotebookPackage {
-    static let fileExtension = "gnote"
-    static let contentType = "com.gimgyeonghun.note.gnote"
+    static let fileExtension = "inknote"
+    static let contentType = "com.gimgyeonghun.ink.notebook"
     static let manifestName = "manifest.json"
     static let backgroundName = "background.pdf"
     static let pagesDirectory = "pages"

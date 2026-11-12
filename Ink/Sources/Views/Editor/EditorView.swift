@@ -141,7 +141,7 @@ struct EditorContent: View {
                 Button { export(.pdfCurrentPage) } label: { Label("PDF로 내보내기 (현재 페이지)", systemImage: "doc") }
                 Button { export(.pngCurrentPage) } label: { Label("이미지로 내보내기 (현재 페이지)", systemImage: "photo") }
                 Divider()
-                Button { export(.package) } label: { Label("노트 파일 공유 (.gnote)", systemImage: "shippingbox") }
+                Button { export(.package) } label: { Label("노트 파일 공유 (.inknote)", systemImage: "shippingbox") }
             } label: {
                 Label("공유", systemImage: "square.and.arrow.up")
             }
@@ -170,6 +170,6 @@ func formatDuration(_ interval: TimeInterval) -> String {
 
 #Preview {
     NavigationStack {
-        EditorView(url: FileManager.default.temporaryDirectory.appendingPathComponent("Preview.gnote"))
+        EditorView(url: FileManager.default.temporaryDirectory.appendingPathComponent("Preview.inknote"))
     }
 }
