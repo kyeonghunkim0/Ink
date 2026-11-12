@@ -66,7 +66,7 @@ struct EditorContent: View {
             .accessibilityHidden(true)
         }
         .sheet(item: $shareItem) { item in
-            ShareSheet(items: [item.url])
+            ShareSheet(items: [item.url], airDropOnly: item.airDropOnly)
         }
         .alert("오류", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("확인") { model.errorMessage = nil }
@@ -142,17 +142,25 @@ struct EditorContent: View {
                 Button { export(.pngCurrentPage) } label: { Label("이미지로 내보내기 (현재 페이지)", systemImage: "photo") }
                 Divider()
                 Button { export(.package) } label: { Label("노트 파일 공유 (.inknote)", systemImage: "shippingbox") }
+                Section("AirDrop") {
+                    Button { export(.pdfAll, airDrop: true) } label: { Label("PDF를 AirDrop으로 보내기", systemImage: "airplane.circle") }
+                    Button { export(.package, airDrop: true) } label: { Label("노트 파일을 AirDrop으로 보내기", systemImage: "airplane.circle") }
+                }
             } label: {
                 Label("공유", systemImage: "square.and.arrow.up")
             }
         }
     }
 
-    private func export(_ kind: EditorModel.ExportKind) {
+    private func export(_ kind: EditorModel.ExportKind, airDrop: Bool = false) {
         isExporting = true
         Task {
             defer { isExporting = false }
-            do { shareItem = ShareItem(url: try await model.export(kind)) } catch { model.errorMessage = error.localizedDescription }
+            do {
+                shareItem = ShareItem(url: try await model.export(kind), airDropOnly: airDrop)
+            } catch {
+                model.errorMessage = error.localizedDescription
+            }
         }
     }
 }
@@ -160,6 +168,7 @@ struct EditorContent: View {
 struct ShareItem: Identifiable {
     let id = UUID()
     let url: URL
+    var airDropOnly = false
 }
 
 func formatDuration(_ interval: TimeInterval) -> String {
