@@ -12,8 +12,10 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
     private var drawingsDirty: Set<UUID> = []
     private var pdfDirty = true
     private var thumbnailDirty = true
-    /// 아직 디스크에 쓰지 않은 녹음 파일(임시 URL).
+    /// 아직 패키지에 쓰지 않은 녹음 파일(임시 URL).
     private var pendingAudio: [String: URL] = [:]
+    /// 이 세션에서 녹음한 파일의 임시 URL. 저장이 백그라운드에서 끝나기 전에도 재생할 수 있도록 유지한다.
+    private var sessionAudio: [String: URL] = [:]
     /// 마지막으로 읽거나 쓴 패키지 래퍼. 변경된 항목만 교체해 iCloud 전송량을 줄인다.
     private var rootWrapper: FileWrapper?
 
@@ -63,12 +65,14 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
     func addRecording(_ info: RecordingInfo, temporaryURL: URL) {
         manifest.recordings.append(info)
         pendingAudio[info.fileName] = temporaryURL
+        sessionAudio[info.fileName] = temporaryURL
         touch()
     }
 
     func removeRecording(_ info: RecordingInfo) {
         manifest.recordings.removeAll { $0.id == info.id }
         pendingAudio[info.fileName] = nil
+        sessionAudio[info.fileName] = nil
         if let audioDir = rootWrapper?.fileWrappers?[NotebookPackage.audioDirectory],
            let file = audioDir.fileWrappers?[info.fileName] {
             audioDir.removeFileWrapper(file)
@@ -76,9 +80,9 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
         touch()
     }
 
-    /// 녹음 파일 URL. 저장이 끝난 뒤에만 유효하다.
+    /// 녹음 파일 URL. 이 세션에서 녹음한 파일은 임시 복사본을, 그 외에는 패키지 안의 파일을 돌려준다.
     func audioURL(for info: RecordingInfo) -> URL {
-        if let pending = pendingAudio[info.fileName] { return pending }
+        if let temp = sessionAudio[info.fileName], FileManager.default.fileExists(atPath: temp.path) { return temp }
         return fileURL
             .appendingPathComponent(NotebookPackage.audioDirectory)
             .appendingPathComponent(info.fileName)

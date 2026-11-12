@@ -39,7 +39,7 @@ final class AudioRecorder: NSObject, AVAudioPlayerDelegate {
         ]
         let rec = try AVAudioRecorder(url: url, settings: settings)
         rec.prepareToRecord()
-        rec.record()
+        guard rec.record() else { throw RecordingError.cannotStart }
         recorder = rec
         recordingURL = url
         let start = Date()
@@ -50,9 +50,9 @@ final class AudioRecorder: NSObject, AVAudioPlayerDelegate {
         return start
     }
 
-    /// 녹음을 끝내고 (임시 URL, 시작 시각, 길이)를 돌려준다.
-    func stopRecording() -> (url: URL, startedAt: Date, duration: TimeInterval)? {
-        guard let recorder, let url = recordingURL, let start = recordingStartedAt else { return nil }
+    /// 녹음을 끝내고 (임시 URL, 시작 시각, 길이)를 돌려준다. 오디오가 기록되지 않았으면 에러를 던진다.
+    func stopRecording() throws -> (url: URL, startedAt: Date, duration: TimeInterval) {
+        guard let recorder, let url = recordingURL, let start = recordingStartedAt else { throw RecordingError.notRecording }
         let duration = recorder.currentTime
         recorder.stop()
         self.recorder = nil
@@ -61,6 +61,11 @@ final class AudioRecorder: NSObject, AVAudioPlayerDelegate {
         isRecording = false
         stopTimer()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+        guard duration > 0.3, size > 1024 else {
+            try? FileManager.default.removeItem(at: url)
+            throw RecordingError.empty
+        }
         return (url, start, duration)
     }
 
@@ -131,6 +136,18 @@ final class AudioRecorder: NSObject, AVAudioPlayerDelegate {
             self.playbackTime = self.playbackDuration
             self.isPlaying = false
             self.stopTimer()
+        }
+    }
+}
+
+enum RecordingError: LocalizedError {
+    case cannotStart, notRecording, empty
+
+    var errorDescription: String? {
+        switch self {
+        case .cannotStart: "녹음을 시작할 수 없습니다. 마이크를 확인해 주세요."
+        case .notRecording: "진행 중인 녹음이 없습니다."
+        case .empty: "녹음된 오디오가 없습니다. 마이크 입력을 확인해 주세요."
         }
     }
 }

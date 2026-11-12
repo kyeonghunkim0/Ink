@@ -178,7 +178,12 @@ final class EditorModel {
     }
 
     private func finishRecording() {
-        guard let document, let result = recorder.stopRecording() else { return }
+        guard let document else { return }
+        let result: (url: URL, startedAt: Date, duration: TimeInterval)
+        do { result = try recorder.stopRecording() } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
         let number = manifest.recordings.count + 1
         let info = RecordingInfo(
             title: "녹음 \(number)", startedAt: result.startedAt, duration: result.duration,
