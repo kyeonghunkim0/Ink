@@ -2,6 +2,37 @@ import UIKit
 import PDFKit
 import PencilKit
 
+/// 페이지 객체를 CoreGraphics로 그린다(화면·내보내기 공용).
+enum PageObjectRenderer {
+    static func draw(_ object: PageObject, document: NotebookDocument, in cg: CGContext) {
+        switch object.kind {
+        case .image(let name):
+            guard let image = document.image(named: name) else { return }
+            image.draw(in: object.frame)
+        case .text(let text):
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineBreakMode = .byWordWrapping
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: object.fontSize),
+                .foregroundColor: UIColor.black,
+                .paragraphStyle: paragraph,
+            ]
+            (text as NSString).draw(in: object.frame.insetBy(dx: 6, dy: 6), withAttributes: attrs)
+        case .sticker(let emoji):
+            let font = UIFont.systemFont(ofSize: object.frame.height * 0.8)
+            let size = (emoji as NSString).size(withAttributes: [.font: font])
+            let origin = CGPoint(x: object.frame.midX - size.width / 2, y: object.frame.midY - size.height / 2)
+            (emoji as NSString).draw(at: origin, withAttributes: [.font: font])
+        }
+    }
+
+    static func drawAll(for pageID: UUID, document: NotebookDocument, in cg: CGContext) {
+        for object in document.manifest.objects where object.pageID == pageID {
+            draw(object, document: document, in: cg)
+        }
+    }
+}
+
 /// 배경 PDF와 필기를 합성해 내보낸다.
 enum Exporter {
     /// 한 페이지를 이미지로 렌더링한다. `scale`은 포인트당 픽셀 수.
@@ -23,6 +54,7 @@ enum Exporter {
             cg.scaleBy(x: 1, y: -1)
             page.draw(with: .mediaBox, to: cg)
             cg.restoreGState()
+            PageObjectRenderer.drawAll(for: document.manifest.pages[pageIndex].id, document: document, in: cg)
             let ink = drawing.image(from: CGRect(origin: .zero, size: bounds.size), scale: scale)
             ink.draw(in: CGRect(origin: .zero, size: bounds.size))
         }
@@ -52,6 +84,7 @@ enum Exporter {
             cg.scaleBy(x: 1, y: -1)
             page.draw(with: .mediaBox, to: cg)
             cg.restoreGState()
+            PageObjectRenderer.drawAll(for: document.manifest.pages[index].id, document: document, in: cg)
             let drawing = document.drawing(for: document.manifest.pages[index].id)
             let ink = drawing.image(from: pageRect, scale: 3)
             ink.draw(in: pageRect)

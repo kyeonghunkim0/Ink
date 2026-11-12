@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 /// 노트북 편집 화면. 문서를 열고 닫는 책임을 가진다.
 struct EditorView: View {
@@ -37,6 +38,8 @@ struct EditorContent: View {
     @State private var showThumbnails = true
     @State private var shareItem: ShareItem?
     @State private var isExporting = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var showStickerSheet = false
 
     var body: some View {
         // 도구 피커가 하단에 떠 있으므로 보조 UI는 캔버스 위쪽에 둔다.
@@ -67,6 +70,16 @@ struct EditorContent: View {
         }
         .sheet(item: $shareItem) { item in
             ShareSheet(items: [item.url], airDropOnly: item.airDropOnly)
+        }
+        .sheet(isPresented: $showStickerSheet) {
+            StickerSheet { emoji in model.addSticker(emoji) }
+        }
+        .onChange(of: photoItem) { _, item in
+            guard let item else { return }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self) { model.addImage(data) }
+                photoItem = nil
+            }
         }
         .alert("오류", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("확인") { model.errorMessage = nil }
@@ -107,6 +120,20 @@ struct EditorContent: View {
                     Label("페이지 목록", systemImage: showThumbnails ? "rectangle.bottomthird.inset.filled" : "rectangle")
                 }
                 .keyboardShortcut("t", modifiers: .command)
+            }
+
+            Menu {
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    Label("사진", systemImage: "photo")
+                }
+                Button { model.addTextBox() } label: { Label("텍스트 상자", systemImage: "textbox") }
+                Button { showStickerSheet = true } label: { Label("스티커", systemImage: "face.smiling") }
+            } label: {
+                Label("삽입", systemImage: "plus.square.on.square")
+            }
+
+            Toggle(isOn: $model.isObjectModeEnabled) {
+                Label("객체 선택", systemImage: "arrow.up.left.and.down.right.magnifyingglass")
             }
 
             Toggle(isOn: $model.isFingerDrawingEnabled) {
@@ -162,6 +189,38 @@ struct EditorContent: View {
                 model.errorMessage = error.localizedDescription
             }
         }
+    }
+}
+
+/// 이모지 스티커 선택 시트.
+struct StickerSheet: View {
+    let onPick: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    private let stickers = ["⭐️", "❤️", "✅", "❌", "⚠️", "💡", "📌", "🔥", "👍", "👀", "🎯", "📝",
+                            "😀", "😂", "🥳", "😍", "🤔", "😎", "🙏", "💪", "🌟", "🎉", "📚", "⏰",
+                            "➡️", "⬅️", "⬆️", "⬇️", "🔴", "🟢", "🔵", "🟡"]
+    private let columns = [GridItem(.adaptive(minimum: 64), spacing: 12)]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(stickers, id: \.self) { emoji in
+                        Button {
+                            onPick(emoji)
+                            dismiss()
+                        } label: {
+                            Text(emoji).font(.system(size: 40)).frame(width: 64, height: 64)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("스티커")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("닫기") { dismiss() } } }
+        }
+        .presentationDetents([.medium])
     }
 }
 

@@ -16,6 +16,10 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
     private var pendingAudio: [String: URL] = [:]
     /// 이 세션에서 녹음한 파일의 임시 URL. 저장이 백그라운드에서 끝나기 전에도 재생할 수 있도록 유지한다.
     private var sessionAudio: [String: URL] = [:]
+    /// 페이지 객체용 이미지 데이터. 키는 `images/` 안의 파일 이름.
+    private(set) var images: [String: Data] = [:]
+    private var imagesDirty: Set<String> = []
+    private var imageCache: [String: UIImage] = [:]
     /// 마지막으로 읽거나 쓴 패키지 래퍼. 변경된 항목만 교체해 iCloud 전송량을 줄인다.
     private var rootWrapper: FileWrapper?
 
@@ -80,6 +84,34 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
         touch()
     }
 
+    // MARK: - Images
+
+    /// 이미지를 패키지에 추가하고 파일 이름을 돌려준다.
+    func addImage(_ data: Data, fileExtension: String = "jpg") -> String {
+        let name = "\(UUID().uuidString).\(fileExtension)"
+        images[name] = data
+        imagesDirty.insert(name)
+        touch()
+        return name
+    }
+
+    func image(named name: String) -> UIImage? {
+        if let cached = imageCache[name] { return cached }
+        guard let data = images[name], let img = UIImage(data: data) else { return nil }
+        imageCache[name] = img
+        return img
+    }
+
+    func removeImage(named name: String) {
+        images[name] = nil
+        imageCache[name] = nil
+        imagesDirty.remove(name)
+        if let dir = rootWrapper?.fileWrappers?[NotebookPackage.imagesDirectory],
+           let file = dir.fileWrappers?[name] {
+            dir.removeFileWrapper(file)
+        }
+    }
+
     /// 녹음 파일 URL. 이 세션에서 녹음한 파일은 임시 복사본을, 그 외에는 패키지 안의 파일을 돌려준다.
     func audioURL(for info: RecordingInfo) -> URL {
         if let temp = sessionAudio[info.fileName], FileManager.default.fileExists(atPath: temp.path) { return temp }
@@ -107,6 +139,11 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
         guard manifest.pages.count > 1, manifest.pages.indices.contains(index) else { return }
         let info = manifest.pages.remove(at: index)
         drawings[info.id] = nil
+        for object in manifest.objects where object.pageID == info.id {
+            if case .image(let name) = object.kind { removeImage(named: name) }
+        }
+        manifest.objects.removeAll { $0.pageID == info.id }
+        manifest.recognizedText[info.id] = nil
         pdfDocument.removePage(at: index)
         if let pagesDir = rootWrapper?.fileWrappers?[NotebookPackage.pagesDirectory],
            let file = pagesDir.fileWrappers?[Self.drawingFileName(for: info.id)] {
@@ -174,6 +211,15 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
         }
         drawings = loaded
         drawingsDirty = []
+        var loadedImages: [String: Data] = [:]
+        if let imagesDir = children[NotebookPackage.imagesDirectory]?.fileWrappers {
+            for (name, file) in imagesDir {
+                if let data = file.regularFileContents { loadedImages[name] = data }
+            }
+        }
+        images = loadedImages
+        imagesDirty = []
+        imageCache = [:]
         pdfDirty = false
         thumbnailDirty = false
         rootWrapper = wrapper
@@ -206,6 +252,20 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
                     with: FileWrapper(regularFileWithContents: drawing.dataRepresentation()))
         }
         drawingsDirty = []
+
+        if !imagesDirty.isEmpty {
+            let imagesDir = children[NotebookPackage.imagesDirectory] ?? {
+                let dir = FileWrapper(directoryWithFileWrappers: [:])
+                dir.preferredFilename = NotebookPackage.imagesDirectory
+                root.addFileWrapper(dir)
+                return dir
+            }()
+            for name in imagesDirty {
+                guard let data = images[name] else { continue }
+                replace(in: imagesDir, name: name, with: FileWrapper(regularFileWithContents: data))
+            }
+            imagesDirty = []
+        }
 
         if !pendingAudio.isEmpty {
             let audioDir = children[NotebookPackage.audioDirectory] ?? {

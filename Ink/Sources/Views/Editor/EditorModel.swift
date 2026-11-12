@@ -37,6 +37,13 @@ final class EditorModel {
     /// 페이지별 필기 변경 횟수. 썸네일 갱신에 사용.
     private(set) var drawingVersions: [UUID: Int] = [:]
     var isFingerDrawingEnabled = CommandLine.arguments.contains("--finger")
+    /// 객체 모드: 켜면 필기 대신 이미지/텍스트/스티커를 선택·이동·편집한다.
+    var isObjectModeEnabled = false {
+        didSet { if !isObjectModeEnabled { selectedObjectID = nil } }
+    }
+    var selectedObjectID: UUID?
+    /// 객체 목록이 바뀔 때 증가. 오버레이가 이 값으로 동기화한다.
+    private(set) var objectsVersion = 0
     var errorMessage: String?
 
     let recorder = AudioRecorder()
@@ -134,6 +141,88 @@ final class EditorModel {
             }
         }
         scheduleSave()
+    }
+
+    // MARK: - Objects
+
+    func objects(forPageAt index: Int) -> [PageObject] {
+        guard let id = pageID(at: index) else { return [] }
+        return manifest.objects.filter { $0.pageID == id }
+    }
+
+    /// 현재 페이지 가운데에 객체를 추가한다.
+    private func insertObject(kind: PageObjectKind, size: CGSize, fontSize: CGFloat = 20) {
+        guard let document, let pageID = pageID(at: currentPageIndex),
+              let page = document.pdfDocument.page(at: currentPageIndex) else { return }
+        let bounds = page.bounds(for: .mediaBox)
+        let w = min(size.width, bounds.width * 0.8), h = size.height * (w / size.width)
+        let frame = CGRect(x: (bounds.width - w) / 2, y: (bounds.height - h) / 2, width: w, height: h)
+        let object = PageObject(pageID: pageID, kind: kind, frame: frame, fontSize: fontSize)
+        document.manifest.objects.append(object)
+        document.markManifestChanged()
+        objectsVersion += 1
+        isObjectModeEnabled = true
+        selectedObjectID = object.id
+        bumpThumbnail(for: pageID)
+        scheduleSave()
+    }
+
+    func addImage(_ data: Data) {
+        guard let document, let image = UIImage(data: data) else { return }
+        // 저장 용량을 위해 긴 변 2048px로 줄여 JPEG로 저장한다.
+        let maxSide: CGFloat = 2048
+        let scale = min(1, maxSide / max(image.size.width, image.size.height))
+        let target = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let resized = UIGraphicsImageRenderer(size: target, format: format).image { _ in image.draw(in: CGRect(origin: .zero, size: target)) }
+        guard let jpeg = resized.jpegData(compressionQuality: 0.85) else { return }
+        let name = document.addImage(jpeg)
+        insertObject(kind: .image(fileName: name), size: CGSize(width: 320, height: 320 * target.height / target.width))
+    }
+
+    func addTextBox() {
+        insertObject(kind: .text("텍스트"), size: CGSize(width: 260, height: 80))
+    }
+
+    func addSticker(_ emoji: String) {
+        insertObject(kind: .sticker(emoji), size: CGSize(width: 96, height: 96))
+    }
+
+    func moveObject(_ id: UUID, to frame: CGRect) {
+        guard let document, let i = document.manifest.objects.firstIndex(where: { $0.id == id }) else { return }
+        var object = document.manifest.objects[i]
+        if object.isText, object.frame.height > 0 {
+            object.fontSize = max(8, object.fontSize * (frame.height / object.frame.height))
+        }
+        object.frame = frame
+        document.manifest.objects[i] = object
+        document.markManifestChanged()
+        bumpThumbnail(for: object.pageID)
+        scheduleSave()
+    }
+
+    func updateObjectText(_ id: UUID, text: String) {
+        guard let document, let i = document.manifest.objects.firstIndex(where: { $0.id == id }) else { return }
+        document.manifest.objects[i].kind = .text(text)
+        document.markManifestChanged()
+        bumpThumbnail(for: document.manifest.objects[i].pageID)
+        scheduleSave()
+    }
+
+    func deleteObject(_ id: UUID) {
+        guard let document, let i = document.manifest.objects.firstIndex(where: { $0.id == id }) else { return }
+        let object = document.manifest.objects.remove(at: i)
+        if case .image(let name) = object.kind { document.removeImage(named: name) }
+        document.markManifestChanged()
+        if selectedObjectID == id { selectedObjectID = nil }
+        objectsVersion += 1
+        bumpThumbnail(for: object.pageID)
+        scheduleSave()
+    }
+
+    private func bumpThumbnail(for pageID: UUID) {
+        drawingVersions[pageID, default: 0] += 1
     }
 
     // MARK: - Pages
@@ -272,6 +361,27 @@ extension EditorModel {
             doc.insertTemplatePage(.grid, at: 1)
             doc.insertTemplatePage(.cornell, at: 2)
             structureVersion += 1
+        }
+        if CommandLine.arguments.contains("--objects") {
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 400, height: 300)).image { ctx in
+                UIColor.systemOrange.setFill(); ctx.fill(CGRect(x: 0, y: 0, width: 400, height: 300))
+                UIColor.white.setFill(); ctx.cgContext.fillEllipse(in: CGRect(x: 120, y: 70, width: 160, height: 160))
+            }
+            if let data = image.pngData() { addImage(data) }
+            addTextBox()
+            addSticker("⭐️")
+            if let id = pageID(at: 0), let page = doc.pdfDocument.page(at: 0) {
+                // 겹치지 않게 페이지 아래쪽에 가로로 늘어놓는다.
+                let bounds = page.bounds(for: .mediaBox)
+                let objs = doc.manifest.objects.filter { $0.pageID == id }
+                for (i, o) in objs.enumerated() {
+                    let idx = doc.manifest.objects.firstIndex(of: o)!
+                    doc.manifest.objects[idx].frame.size = CGSize(width: 160, height: 120)
+                    doc.manifest.objects[idx].frame.origin = CGPoint(x: 40 + CGFloat(i) * 190, y: bounds.height * 0.62)
+                }
+                objectsVersion += 1
+            }
+            isObjectModeEnabled = false
         }
     }
 }

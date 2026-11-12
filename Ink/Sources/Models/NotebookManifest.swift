@@ -99,6 +99,27 @@ struct RecordingInfo: Codable, Identifiable, Hashable, Sendable {
     var fileName: String { "\(id.uuidString).m4a" }
 }
 
+/// 페이지 위에 올리는 객체 종류.
+enum PageObjectKind: Codable, Hashable, Sendable {
+    /// `images/<fileName>`에 저장된 사진.
+    case image(fileName: String)
+    /// 텍스트 상자.
+    case text(String)
+    /// 이모지 스티커.
+    case sticker(String)
+}
+
+/// 필기 아래에 놓이는 페이지 객체. 좌표는 페이지 포인트(좌상단 원점).
+struct PageObject: Codable, Identifiable, Hashable, Sendable {
+    var id: UUID = UUID()
+    var pageID: UUID
+    var kind: PageObjectKind
+    var frame: CGRect
+    var fontSize: CGFloat = 20
+
+    var isText: Bool { if case .text = kind { return true } else { return false } }
+}
+
 /// `.inknote` 패키지의 `manifest.json`.
 struct NotebookManifest: Codable, Hashable, Sendable {
     static let currentVersion = 1
@@ -115,6 +136,9 @@ struct NotebookManifest: Codable, Hashable, Sendable {
     var defaultTemplate: PaperTemplate = .blank
     var pages: [PageInfo] = []
     var recordings: [RecordingInfo] = []
+    var objects: [PageObject] = []
+    /// 페이지별 손글씨 인식 결과(검색용).
+    var recognizedText: [UUID: String] = [:]
 
     var pageSize: CGSize { paperSize.size(landscape: isLandscape) }
 
@@ -146,6 +170,7 @@ enum NotebookPackage {
     static let backgroundName = "background.pdf"
     static let pagesDirectory = "pages"
     static let audioDirectory = "audio"
+    static let imagesDirectory = "images"
     static let thumbnailName = "thumbnail.png"
     static let drawingExtension = "drawing"
 }

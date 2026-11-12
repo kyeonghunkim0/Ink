@@ -38,13 +38,17 @@ struct PDFCanvasView: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, @preconcurrency PDFPageOverlayViewProvider, PKCanvasViewDelegate {
+    final class Coordinator: NSObject, @preconcurrency PDFPageOverlayViewProvider, PKCanvasViewDelegate, PageOverlayDelegate {
         let model: EditorModel
         weak var pdfView: PDFView?
         let toolPicker = PKToolPicker()
 
-        private var canvases: [PDFPage: PKCanvasView] = [:]
+        private var overlays: [PDFPage: PageOverlayView] = [:]
         private var pageForCanvas: [ObjectIdentifier: PDFPage] = [:]
+        private var canvases: [PKCanvasView] { overlays.values.map(\.canvas) }
+        private var appliedObjectsVersion = -1
+        private var appliedObjectMode = false
+        private var appliedSelection: UUID?
         private var appliedStructureVersion = -1
         private var appliedNavigationToken = -1
         private var appliedZoomToken = 0
@@ -68,7 +72,7 @@ struct PDFCanvasView: UIViewRepresentable {
                 toolPicker.colorUserInterfaceStyle = inkStyle(for: model)
                 let targetIndex = model.currentPageIndex
                 let previousScale = pdfView.document == nil ? nil : pdfView.scaleFactor
-                canvases.removeAll()
+                overlays.removeAll()
                 pageForCanvas.removeAll()
                 pdfView.document = nil
                 pdfView.document = document.pdfDocument
@@ -91,7 +95,21 @@ struct PDFCanvasView: UIViewRepresentable {
 
             if appliedPolicy != model.drawingPolicy {
                 appliedPolicy = model.drawingPolicy
-                for canvas in canvases.values { canvas.drawingPolicy = model.drawingPolicy }
+                for canvas in canvases { canvas.drawingPolicy = model.drawingPolicy }
+            }
+
+            if appliedObjectsVersion != model.objectsVersion {
+                appliedObjectsVersion = model.objectsVersion
+                syncObjects()
+            }
+            if appliedObjectMode != model.isObjectModeEnabled {
+                appliedObjectMode = model.isObjectModeEnabled
+                for overlay in overlays.values { overlay.setObjectMode(appliedObjectMode) }
+                if !appliedObjectMode { focusCurrentCanvas() }
+            }
+            if appliedSelection != model.selectedObjectID {
+                appliedSelection = model.selectedObjectID
+                for overlay in overlays.values { overlay.select(appliedSelection) }
             }
 
             let filter = model.playbackFilter
@@ -114,8 +132,8 @@ struct PDFCanvasView: UIViewRepresentable {
         func focusCurrentCanvas() {
             DispatchQueue.main.async { [weak self] in
                 guard let self, let pdfView = self.pdfView else { return }
-                if self.canvases.values.contains(where: { $0.isFirstResponder }) { return }
-                let target = pdfView.currentPage.flatMap { self.canvases[$0] } ?? self.canvases.values.first
+                if self.canvases.contains(where: { $0.isFirstResponder }) { return }
+                let target = pdfView.currentPage.flatMap { self.overlays[$0]?.canvas } ?? self.canvases.first
                 target?.becomeFirstResponder()
             }
         }
@@ -130,15 +148,16 @@ struct PDFCanvasView: UIViewRepresentable {
         private func applyPlayback(_ filter: PlaybackFilter?) {
             isApplyingPlayback = true
             defer { isApplyingPlayback = false }
-            for (page, canvas) in canvases {
+            for (page, overlay) in overlays {
                 guard let index = pdfView?.document?.index(for: page) else { continue }
                 let full = model.drawing(forPageAt: index)
+                let canvas = overlay.canvas
                 if let filter {
                     canvas.drawing = filter.apply(to: full)
                     canvas.isUserInteractionEnabled = false
                 } else {
                     canvas.drawing = full
-                    canvas.isUserInteractionEnabled = true
+                    canvas.isUserInteractionEnabled = !model.isObjectModeEnabled
                 }
             }
         }
@@ -157,12 +176,25 @@ struct PDFCanvasView: UIViewRepresentable {
 
         // MARK: PDFPageOverlayViewProvider
 
+        private func syncObjects() {
+            guard let document = model.document, let doc = pdfView?.document else { return }
+            for (page, overlay) in overlays {
+                let index = doc.index(for: page)
+                overlay.sync(objects: model.objects(forPageAt: index), document: document)
+            }
+        }
+
         func pdfView(_ view: PDFView, overlayViewFor page: PDFPage) -> UIView? {
-            if let existing = canvases[page] { return existing }
-            guard let doc = view.document else { return nil }
+            if let existing = overlays[page] { return existing }
+            guard let doc = view.document, let document = model.document else { return nil }
             let index = doc.index(for: page)
 
-            let canvas = PKCanvasView()
+            let overlay = PageOverlayView(frame: page.bounds(for: .mediaBox))
+            overlay.delegate = self
+            overlay.sync(objects: model.objects(forPageAt: index), document: document)
+            overlay.setObjectMode(model.isObjectModeEnabled)
+            overlay.select(model.selectedObjectID)
+            let canvas = overlay.canvas
             canvas.overrideUserInterfaceStyle = inkStyle(for: model)
             canvas.backgroundColor = .clear
             canvas.isOpaque = false
@@ -180,18 +212,39 @@ struct PDFCanvasView: UIViewRepresentable {
                 canvas.tool = toolPicker.selectedTool
             }
 
-            canvases[page] = canvas
+            overlays[page] = overlay
             pageForCanvas[ObjectIdentifier(canvas)] = page
             if didShowToolPicker { focusCurrentCanvas() }
-            return canvas
+            return overlay
         }
 
         func pdfView(_ pdfView: PDFView, willEndDisplayingOverlayView overlayView: UIView, for page: PDFPage) {
-            guard let canvas = overlayView as? PKCanvasView else { return }
+            guard let overlay = overlayView as? PageOverlayView else { return }
+            let canvas = overlay.canvas
             toolPicker.removeObserver(canvas)
-            canvases[page] = nil
+            overlays[page] = nil
             pageForCanvas[ObjectIdentifier(canvas)] = nil
             if canvas.isFirstResponder { focusCurrentCanvas() }
+        }
+
+        // MARK: PageOverlayDelegate
+
+        func overlay(_ overlay: PageOverlayView, didMove objectID: UUID, to frame: CGRect) {
+            model.moveObject(objectID, to: frame)
+        }
+
+        func overlay(_ overlay: PageOverlayView, didEditText objectID: UUID, text: String) {
+            model.updateObjectText(objectID, text: text)
+        }
+
+        func overlay(_ overlay: PageOverlayView, didSelect objectID: UUID?) {
+            model.selectedObjectID = objectID
+            appliedSelection = objectID
+            for other in overlays.values where other !== overlay { other.select(nil) }
+        }
+
+        func overlay(_ overlay: PageOverlayView, didDelete objectID: UUID) {
+            model.deleteObject(objectID)
         }
 
         // MARK: PKCanvasViewDelegate
