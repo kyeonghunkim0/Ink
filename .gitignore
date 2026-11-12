@@ -1,0 +1,27 @@
+# Xcode / tuist generated
+*.xcodeproj
+*.xcworkspace
+Derived/
+.tuist-bin/
+.build/
+DerivedData/
+build/
+
+# Xcode user data
+xcuserdata/
+*.xcuserstate
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved
+
+# Tooling
+.gstack/
