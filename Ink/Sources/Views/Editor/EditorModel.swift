@@ -48,6 +48,12 @@ final class EditorModel {
 
     let recorder = AudioRecorder()
     @ObservationIgnored private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var recognitionTask: Task<Void, Never>?
+    @ObservationIgnored private var recognitionDirty: Set<UUID> = []
+    /// 편집기 검색어.
+    var searchText = ""
+    /// 손글씨 인식이 끝날 때마다 증가. 검색 결과 갱신에 사용.
+    private(set) var recognitionVersion = 0
     @ObservationIgnored private var hasSecurityScope = false
     /// 줌 요청. 양수는 확대, 음수는 축소. 캔버스 뷰가 소비한다.
     private(set) var zoomRequest: (token: Int, delta: Int) = (0, 0)
@@ -97,6 +103,8 @@ final class EditorModel {
 
     func close() async {
         saveTask?.cancel()
+        recognitionTask?.cancel()
+        if !recognitionDirty.isEmpty { await recognizeDirtyPages() }
         if recorder.isRecording { finishRecording() }
         recorder.stopPlayback()
         guard let document else { return }
@@ -133,6 +141,8 @@ final class EditorModel {
         guard let document, let id = pageID(at: index) else { return }
         document.setDrawing(drawing, for: id)
         drawingVersions[id, default: 0] += 1
+        recognitionDirty.insert(id)
+        scheduleRecognition()
         if isWhiteboard, let page = document.pdfDocument.page(at: 0) {
             let current = page.bounds(for: .mediaBox).size
             if let grown = WhiteboardGeometry.grownSize(current: current, drawingBounds: drawing.bounds) {
@@ -141,6 +151,83 @@ final class EditorModel {
             }
         }
         scheduleSave()
+    }
+
+    // MARK: - Handwriting recognition & search
+
+    /// 필기가 멈추고 잠시 뒤 바뀐 페이지의 손글씨를 인식한다.
+    private func scheduleRecognition() {
+        recognitionTask?.cancel()
+        recognitionTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            await self?.recognizeDirtyPages()
+        }
+    }
+
+    private func recognizeDirtyPages() async {
+        guard let document else { return }
+        let targets = recognitionDirty
+        recognitionDirty = []
+        for pageID in targets {
+            guard let index = manifest.pages.firstIndex(where: { $0.id == pageID }),
+                  let page = document.pdfDocument.page(at: index) else { continue }
+            let bounds = page.bounds(for: .mediaBox)
+            let drawing = document.drawing(for: pageID)
+            let text: String
+            if drawing.strokes.isEmpty {
+                text = ""
+            } else {
+                // 배경 없이 잉크만 흰 바탕에 그려 인식 정확도를 높인다.
+                let format = UIGraphicsImageRendererFormat.default()
+                format.scale = 2
+                let image = UIGraphicsImageRenderer(size: bounds.size, format: format).image { ctx in
+                    UIColor.white.setFill()
+                    ctx.fill(CGRect(origin: .zero, size: bounds.size))
+                    drawing.image(from: CGRect(origin: .zero, size: bounds.size), scale: 2)
+                        .draw(in: CGRect(origin: .zero, size: bounds.size))
+                }
+                guard let cg = image.cgImage else { continue }
+                text = (try? await HandwritingRecognizer.recognize(cg)) ?? ""
+            }
+            guard let document = self.document else { return }
+            if document.manifest.recognizedText[pageID] != text {
+                document.manifest.recognizedText[pageID] = text
+                document.markManifestChanged()
+                recognitionVersion += 1
+                scheduleSave()
+            }
+        }
+    }
+
+    struct SearchHit: Identifiable, Hashable {
+        var id: UUID { pageID }
+        let pageID: UUID
+        let pageIndex: Int
+        let snippet: String
+    }
+
+    /// 검색어가 들어 있는 페이지 목록. 손글씨 인식 결과, 텍스트 상자, PDF 본문을 함께 찾는다.
+    var searchHits: [SearchHit] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty, let document else { return [] }
+        return manifest.pages.enumerated().compactMap { index, info in
+            var sources: [String] = []
+            if let ink = manifest.recognizedText[info.id] { sources.append(ink) }
+            for object in manifest.objects where object.pageID == info.id {
+                if case .text(let t) = object.kind { sources.append(t) }
+            }
+            if let pdfText = document.pdfDocument.page(at: index)?.string { sources.append(pdfText) }
+            for source in sources {
+                if let range = source.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) {
+                    let start = source.index(range.lowerBound, offsetBy: -20, limitedBy: source.startIndex) ?? source.startIndex
+                    let end = source.index(range.upperBound, offsetBy: 40, limitedBy: source.endIndex) ?? source.endIndex
+                    let snippet = source[start..<end].replacingOccurrences(of: "\n", with: " ")
+                    return SearchHit(pageID: info.id, pageIndex: index, snippet: String(snippet))
+                }
+            }
+            return nil
+        }
     }
 
     // MARK: - Objects

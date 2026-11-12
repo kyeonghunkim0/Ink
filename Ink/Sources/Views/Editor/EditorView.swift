@@ -48,6 +48,9 @@ struct EditorContent: View {
                 PageThumbnailStrip(model: model)
                     .padding(.top, 8)
             }
+            if !model.searchText.isEmpty {
+                SearchResultsBar(model: model)
+            }
             if model.recorder.isRecording || model.recorder.playingRecordingID != nil {
                 RecordingBar(model: model)
                     .padding(.top, showThumbnails && !model.isWhiteboard ? 0 : 8)
@@ -59,6 +62,7 @@ struct EditorContent: View {
         .navigationTitle(model.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
+        .searchable(text: $model.searchText, placement: .toolbar, prompt: "손글씨·텍스트 검색")
         .background {
             // 키보드 줌 단축키(⌘+ / ⌘-). 보이지 않는 버튼으로 등록한다.
             Group {
@@ -189,6 +193,38 @@ struct EditorContent: View {
                 model.errorMessage = error.localizedDescription
             }
         }
+    }
+}
+
+/// 검색 결과(페이지 목록) 바.
+struct SearchResultsBar: View {
+    let model: EditorModel
+
+    var body: some View {
+        let hits = model.searchHits
+        ScrollView(.horizontal) {
+            HStack(spacing: 10) {
+                if hits.isEmpty {
+                    Text("“\(model.searchText)” 결과 없음").font(.callout).foregroundStyle(.secondary)
+                } else {
+                    ForEach(hits) { hit in
+                        Button { model.goToPage(hit.pageIndex) } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(hit.pageIndex + 1)쪽").font(.caption.bold())
+                                Text(hit.snippet).font(.caption).lineLimit(1).foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: 260, alignment: .leading)
+                        }
+                        .adaptiveGlassButtonStyle()
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+        }
+        .adaptiveGlass(cornerRadius: 14)
+        .padding(.horizontal, 24)
+        .id(model.recognitionVersion)
     }
 }
 

@@ -112,6 +112,19 @@ final class DocumentStore {
         return result
     }
 
+    /// 노트북의 검색용 텍스트(제목 + 손글씨 인식 결과 + 텍스트 상자). 매니페스트를 읽어 만든다.
+    nonisolated static func searchableText(forNotebookAt url: URL) -> String {
+        let manifestURL = url.appendingPathComponent(NotebookPackage.manifestName)
+        guard let data = try? Data(contentsOf: manifestURL),
+              let manifest = try? NotebookManifest.decode(data) else { return "" }
+        var parts = [manifest.title]
+        parts.append(contentsOf: manifest.recognizedText.values)
+        for object in manifest.objects {
+            if case .text(let t) = object.kind { parts.append(t) }
+        }
+        return parts.joined(separator: "\n")
+    }
+
     func displayName(for folder: URL) -> String {
         folder == rootURL ? "모든 노트" : folder.lastPathComponent
     }

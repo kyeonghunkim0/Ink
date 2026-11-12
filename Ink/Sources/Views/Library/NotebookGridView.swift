@@ -8,6 +8,8 @@ struct NotebookGridView: View {
     @Environment(DocumentStore.self) private var store
     @Environment(Router.self) private var router
     @State private var items: [LibraryItem] = []
+    @State private var searchText = ""
+    @State private var filteredItems: [LibraryItem] = []
     @State private var showNewNotebook = false
     @State private var showNewFolder = false
     @State private var newFolderName = ""
@@ -21,15 +23,16 @@ struct NotebookGridView: View {
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 20)]
 
     var body: some View {
-        ScrollView {
-            if items.isEmpty {
+        let shown = searchText.isEmpty ? items : filteredItems
+        return ScrollView {
+            if shown.isEmpty {
                 ContentUnavailableView(
                     "노트가 없습니다", systemImage: "note.text",
                     description: Text("오른쪽 위 + 버튼으로 새 노트를 만들거나 PDF, Word, PowerPoint, Excel 파일을 가져오세요."))
                 .padding(.top, 80)
             } else {
                 LazyVGrid(columns: columns, spacing: 24) {
-                    ForEach(items) { item in
+                    ForEach(shown) { item in
                         LibraryItemCell(item: item)
                             .onTapGesture { open(item) }
                             .contextMenu { contextMenu(for: item) }
@@ -40,6 +43,8 @@ struct NotebookGridView: View {
         }
         .navigationTitle(store.displayName(for: folder))
         .toolbar { toolbarContent }
+        .searchable(text: $searchText, prompt: "노트 제목·손글씨 검색")
+        .task(id: "\(searchText)-\(store.changeCounter)") { await filterItems() }
         .overlay {
             if isImporting {
                 ProgressView("가져오는 중…")
@@ -126,6 +131,21 @@ struct NotebookGridView: View {
         Button { movingItem = item } label: { Label("이동", systemImage: "folder") }
         Divider()
         Button(role: .destructive) { attempt { try store.delete(item) } } label: { Label("삭제", systemImage: "trash") }
+    }
+
+    /// 제목과 매니페스트의 인식 텍스트로 노트를 거른다. 폴더는 이름으로만 거른다.
+    private func filterItems() async {
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { filteredItems = items; return }
+        let candidates = items
+        let matched = await Task.detached(priority: .userInitiated) { () -> [URL] in
+            candidates.filter { item in
+                if item.name.localizedCaseInsensitiveContains(query) { return true }
+                guard item.kind == .notebook else { return false }
+                return DocumentStore.searchableText(forNotebookAt: item.url).localizedCaseInsensitiveContains(query)
+            }.map(\.url)
+        }.value
+        filteredItems = items.filter { matched.contains($0.url) }
     }
 
     private func open(_ item: LibraryItem) {
