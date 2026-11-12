@@ -44,7 +44,7 @@ struct NotebookGridView: View {
             if isImporting {
                 ProgressView("가져오는 중…")
                     .padding(24)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                    .adaptiveGlass(cornerRadius: 16)
             }
         }
         .sheet(isPresented: $showNewNotebook) {

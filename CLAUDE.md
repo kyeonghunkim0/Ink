@@ -1,7 +1,7 @@
 # Note — GoodNotes 스타일 iPadOS 노트 앱
 
 ## 프로젝트 개요
-- iPad 전용, iPadOS 26.0+, Swift 6 strict concurrency, SwiftUI + UIKit 브리징
+- iPad 전용, iPadOS 18.0+ (26에서 Liquid Glass 활성화), Swift 6 strict concurrency, SwiftUI + UIKit 브리징
 - 프로젝트는 tuist로 생성: `tuist generate` → `Note.xcworkspace`
 - 빌드: `xcodebuild -workspace Note.xcworkspace -scheme Note -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M5)' build`
 - 테스트: 같은 명령에 `test`
@@ -22,8 +22,10 @@
 - UIKit 브리징은 `UIViewRepresentable`/`UIViewControllerRepresentable` + Coordinator로 한정
 
 ## UI 표준 (스킬 `glass` 준수)
-- 툴바·플로팅 컨트롤·카드는 Liquid Glass: `.glassEffect()`, 형제 글래스 뷰는 반드시 `GlassEffectContainer`로 감쌈
-- 버튼은 `.buttonStyle(.glass)` / 강조는 `.glassProminent`
+- 글래스 API는 직접 호출하지 않고 `Views/Shared/AdaptiveGlass.swift`의 헬퍼만 사용
+  (`adaptiveGlass(cornerRadius:)`, `adaptiveGlassCapsule()`, `adaptiveGlassButtonStyle()`, `adaptiveProminentButtonStyle()`, `AdaptiveGlassContainer`)
+- 헬퍼 내부에서 `#available(iOS 26, *)`로 분기하고 18에서는 머티리얼/bordered로 대체
+- 형제 글래스 뷰는 `AdaptiveGlassContainer`로 감쌈
 - 글래스는 인터랙티브 요소·툴바·카드에만. 캔버스 위 불투명 배경 금지
 - 라이트/다크 모두 확인
 
@@ -35,6 +37,6 @@
 - 커밋은 사용자가 요청할 때만, 메시지는 `/caveman-commit`
 
 ## 금지/주의
-- iOS 18 호환 코드 작성 금지(26 API 그대로 사용)
+- 26 전용 API는 반드시 `#available(iOS 26, *)` 분기 (배포 타깃 18.0)
 - 문서 저장은 항상 UIDocument 경유(직접 FileManager 쓰기 금지)
 - 오디오 세션은 AudioRecorder 서비스에서만 설정

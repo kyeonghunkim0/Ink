@@ -5,7 +5,7 @@ struct RecordingBar: View {
     let model: EditorModel
 
     var body: some View {
-        GlassEffectContainer(spacing: 12) {
+        AdaptiveGlassContainer(spacing: 12) {
             HStack(spacing: 14) {
                 if model.recorder.isRecording {
                     recordingContent
@@ -15,7 +15,7 @@ struct RecordingBar: View {
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
-            .glassEffect(.regular, in: .capsule)
+            .adaptiveGlassCapsule()
         }
         .padding(.horizontal, 24)
     }
@@ -31,7 +31,7 @@ struct RecordingBar: View {
             } label: {
                 Label("정지", systemImage: "stop.fill")
             }
-            .buttonStyle(.glassProminent)
+            .adaptiveProminentButtonStyle()
             .tint(.red)
         }
     }
@@ -44,7 +44,7 @@ struct RecordingBar: View {
             } label: {
                 Image(systemName: recorder.isPlaying ? "pause.fill" : "play.fill")
             }
-            .buttonStyle(.glass)
+            .adaptiveGlassButtonStyle()
             Text(formatDuration(recorder.playbackTime)).font(.caption.monospacedDigit())
             Slider(
                 value: Binding(get: { recorder.playbackTime }, set: { recorder.seek(to: $0) }),
@@ -60,7 +60,7 @@ struct RecordingBar: View {
                 }
             }
             Button { recorder.stopPlayback() } label: { Image(systemName: "xmark") }
-                .buttonStyle(.glass)
+                .adaptiveGlassButtonStyle()
         }
     }
 }

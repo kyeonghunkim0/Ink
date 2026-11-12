@@ -36,7 +36,7 @@ struct PageThumbnailStrip: View {
             }
             .scrollIndicators(.hidden)
             .frame(height: 112)
-            .glassEffect(.regular, in: .rect(cornerRadius: 18))
+            .adaptiveGlass(cornerRadius: 18)
             .padding(.horizontal, 24)
             .onChange(of: model.currentPageIndex) { _, index in
                 if let id = model.pageID(at: index) {

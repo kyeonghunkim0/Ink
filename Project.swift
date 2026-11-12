@@ -60,7 +60,7 @@ let project = Project(
             "SWIFT_VERSION": "6.0",
             "SWIFT_STRICT_CONCURRENCY": "complete",
             "TARGETED_DEVICE_FAMILY": "2",
-            "IPHONEOS_DEPLOYMENT_TARGET": "26.0",
+            "IPHONEOS_DEPLOYMENT_TARGET": "18.0",
             "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
             "CODE_SIGN_STYLE": "Automatic",
         ]
@@ -71,7 +71,7 @@ let project = Project(
             destinations: [.iPad],
             product: .app,
             bundleId: "\(bundleIDPrefix).Note",
-            deploymentTargets: .iOS("26.0"),
+            deploymentTargets: .iOS("18.0"),
             infoPlist: .extendingDefault(with: infoPlist),
             sources: ["Note/Sources/**"],
             resources: ["Note/Resources/**"],
@@ -86,7 +86,7 @@ let project = Project(
             destinations: [.iPad],
             product: .unitTests,
             bundleId: "\(bundleIDPrefix).NoteTests",
-            deploymentTargets: .iOS("26.0"),
+            deploymentTargets: .iOS("18.0"),
             infoPlist: .default,
             sources: ["Note/Tests/**"],
             dependencies: [.target(name: "Note")]
@@ -96,7 +96,7 @@ let project = Project(
             destinations: [.iPad],
             product: .uiTests,
             bundleId: "\(bundleIDPrefix).NoteUITests",
-            deploymentTargets: .iOS("26.0"),
+            deploymentTargets: .iOS("18.0"),
             infoPlist: .default,
             sources: ["Note/UITests/**"],
             dependencies: [.target(name: "Note")]

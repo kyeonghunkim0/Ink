@@ -68,7 +68,7 @@ struct EditorContent: View {
             if isExporting {
                 ProgressView("내보내는 중…")
                     .padding(24)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                    .adaptiveGlass(cornerRadius: 16)
             }
         }
     }

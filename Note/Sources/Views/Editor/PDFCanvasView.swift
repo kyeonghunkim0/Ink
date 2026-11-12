@@ -162,7 +162,11 @@ struct PDFCanvasView: UIViewRepresentable {
             canvas.isUserInteractionEnabled = appliedFilter == nil
             toolPicker.addObserver(canvas)
             toolPicker.setVisible(true, forFirstResponder: canvas)
-            if let tool = toolPicker.selectedToolItem.tool { canvas.tool = tool }
+            if #available(iOS 26, *) {
+                if let tool = toolPicker.selectedToolItem.tool { canvas.tool = tool }
+            } else {
+                canvas.tool = toolPicker.selectedTool
+            }
 
             canvases[page] = canvas
             pageForCanvas[ObjectIdentifier(canvas)] = page

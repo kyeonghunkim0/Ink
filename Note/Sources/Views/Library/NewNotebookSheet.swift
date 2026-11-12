@@ -41,7 +41,7 @@ struct NewNotebookSheet: View {
                         onCreate(options)
                         dismiss()
                     }
-                    .buttonStyle(.glassProminent)
+                    .adaptiveProminentButtonStyle()
                 }
             }
         }
