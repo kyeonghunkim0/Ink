@@ -50,7 +50,7 @@ let infoPlist: [String: Plist.Value] = [
 
 let project = Project(
     name: "Ink",
-    organizationName: "gimgyeonghun",
+    organizationName: "KyeongHun Kim",
     options: .options(
         automaticSchemesOptions: .disabled,
         developmentRegion: "ko"
