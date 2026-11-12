@@ -66,6 +66,7 @@ struct PDFCanvasView: UIViewRepresentable {
 
             if appliedStructureVersion != model.structureVersion {
                 appliedStructureVersion = model.structureVersion
+                toolPicker.colorUserInterfaceStyle = inkStyle(for: model)
                 let targetIndex = model.currentPageIndex
                 let previousScale = pdfView.document == nil ? nil : pdfView.scaleFactor
                 canvases.removeAll()
@@ -151,6 +152,12 @@ struct PDFCanvasView: UIViewRepresentable {
             model.noteVisiblePage(index)
         }
 
+        /// PencilKit은 다크 모드에서 검정 잉크를 흰색으로 뒤집어 보여 주므로,
+        /// 잉크 색 표시는 시스템 테마가 아니라 용지 색에 맞춘다.
+        private func inkStyle(for model: EditorModel) -> UIUserInterfaceStyle {
+            model.manifest.paperColor == .dark ? .dark : .light
+        }
+
         // MARK: PDFPageOverlayViewProvider
 
         func pdfView(_ view: PDFView, overlayViewFor page: PDFPage) -> UIView? {
@@ -159,6 +166,7 @@ struct PDFCanvasView: UIViewRepresentable {
             let index = doc.index(for: page)
 
             let canvas = PKCanvasView()
+            canvas.overrideUserInterfaceStyle = inkStyle(for: model)
             canvas.backgroundColor = .clear
             canvas.isOpaque = false
             canvas.isScrollEnabled = false

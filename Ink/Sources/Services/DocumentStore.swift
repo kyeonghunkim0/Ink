@@ -24,7 +24,7 @@ struct NewNotebookOptions: Sendable {
     var template: PaperTemplate = .lined
     var paperSize: PaperSize = .a4
     var paperColor: PaperColor = .white
-    var isLandscape = false
+    var isLandscape = true
 }
 
 /// iCloud(또는 로컬 폴백) 문서 저장소. 폴더는 실제 디렉터리, 노트북은 `.inknote` 패키지다.
