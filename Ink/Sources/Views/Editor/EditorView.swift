@@ -96,6 +96,7 @@ struct EditorContent: View {
     @State private var isExporting = false
     @State private var photoItem: PhotosPickerItem?
     @State private var showStickerSheet = false
+    @State private var showClearConfirm = false
 
     var body: some View {
         // 도구 피커가 하단에 떠 있으므로 보조 UI는 캔버스 위쪽에 둔다.
@@ -118,6 +119,10 @@ struct EditorContent: View {
         .navigationTitle(model.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
+        .confirmationDialog("현재 페이지의 필기와 객체를 모두 지울까요?", isPresented: $showClearConfirm, titleVisibility: .visible) {
+            Button("페이지 전체 지우기", role: .destructive) { model.clearCurrentPage() }
+            Button("취소", role: .cancel) {}
+        }
         .searchable(text: $model.searchText, placement: .toolbar, prompt: "손글씨·텍스트 검색")
         .background {
             // 키보드 줌 단축키(⌘+ / ⌘-). 보이지 않는 버튼으로 등록한다.
@@ -190,6 +195,19 @@ struct EditorContent: View {
                 Button { showStickerSheet = true } label: { Label("스티커", systemImage: "face.smiling") }
             } label: {
                 Label("삽입", systemImage: "plus.square.on.square")
+            }
+
+            Menu {
+                Button { model.requestEdit(.copy) } label: { Label("복사", systemImage: "doc.on.doc") }
+                    .keyboardShortcut("c", modifiers: .command)
+                Button { model.requestEdit(.cut) } label: { Label("잘라내기", systemImage: "scissors") }
+                    .keyboardShortcut("x", modifiers: .command)
+                Button { model.requestEdit(.paste) } label: { Label("붙여넣기", systemImage: "doc.on.clipboard") }
+                    .keyboardShortcut("v", modifiers: .command)
+                Divider()
+                Button(role: .destructive) { showClearConfirm = true } label: { Label("페이지 전체 지우기", systemImage: "trash") }
+            } label: {
+                Label("편집", systemImage: "lasso")
             }
 
             Toggle(isOn: $model.isObjectModeEnabled) {

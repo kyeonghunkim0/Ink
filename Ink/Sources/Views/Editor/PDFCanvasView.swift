@@ -59,6 +59,7 @@ struct PDFCanvasView: UIViewRepresentable {
         private var appliedStructureVersion = -1
         private var appliedNavigationToken = -1
         private var appliedZoomToken = 0
+        private var appliedEditToken = 0
         private var appliedPolicy: PKCanvasViewDrawingPolicy?
         private var appliedFilter: PlaybackFilter?
         private var isApplyingPlayback = false
@@ -104,6 +105,11 @@ struct PDFCanvasView: UIViewRepresentable {
                 appliedPolicy = model.drawingPolicy
                 for canvas in canvases { canvas.drawingPolicy = model.drawingPolicy }
                 (pdfView as? ResponderPDFView)?.isFingerDrawingEnabled = model.isFingerDrawingEnabled
+            }
+
+            if appliedEditToken != model.editRequest.token {
+                appliedEditToken = model.editRequest.token
+                perform(model.editRequest.action)
             }
 
             if appliedObjectsVersion != model.objectsVersion {
@@ -175,6 +181,23 @@ struct PDFCanvasView: UIViewRepresentable {
                     canvas.isUserInteractionEnabled = !model.isObjectModeEnabled
                 }
             }
+        }
+
+        /// 현재 페이지 캔버스에 표준 편집 동작을 보낸다. 올가미 선택이 있을 때 복사/잘라내기가 동작한다.
+        private func perform(_ action: CanvasEditAction) {
+            guard let pdfView, let page = pdfView.currentPage, let canvas = overlays[page]?.canvas else { return }
+            if !canvas.isFirstResponder { canvas.becomeFirstResponder() }
+            let selector: Selector
+            switch action {
+            case .copy: selector = #selector(UIResponderStandardEditActions.copy(_:))
+            case .cut: selector = #selector(UIResponderStandardEditActions.cut(_:))
+            case .paste: selector = #selector(UIResponderStandardEditActions.paste(_:))
+            }
+            guard canvas.canPerformAction(selector, withSender: nil) else {
+                model.errorMessage = action == .paste ? "붙여넣을 필기가 없습니다." : "올가미 도구로 먼저 영역을 선택하세요."
+                return
+            }
+            canvas.perform(selector, with: nil)
         }
 
         @objc func pageChanged() {
