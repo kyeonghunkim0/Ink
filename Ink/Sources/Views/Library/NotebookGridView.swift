@@ -20,6 +20,11 @@ struct NotebookGridView: View {
     @State private var renameText = ""
     @State private var movingItem: LibraryItem?
     @State private var errorMessage: String?
+    /// 선택 모드. 셀을 탭하면 열지 않고 선택한다.
+    @State private var isSelecting = false
+    @State private var selection: Set<URL> = []
+    @State private var showDeleteConfirmation = false
+    @State private var isMovingSelection = false
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 20)]
 
@@ -41,16 +46,20 @@ struct NotebookGridView: View {
             } else {
                 LazyVGrid(columns: columns, spacing: 24) {
                     ForEach(shown) { item in
-                        LibraryItemCell(item: item)
-                            .onTapGesture { open(item) }
-                            .contextMenu { contextMenu(for: item) }
+                        LibraryItemCell(item: item, selectionState: selectionState(for: item))
+                            .onTapGesture { isSelecting ? toggleSelection(item) : open(item) }
+                            .contextMenu { if !isSelecting { contextMenu(for: item) } }
                     }
                 }
                 .padding(20)
             }
         }
-        .navigationTitle(store.displayName(for: folder))
+        .navigationTitle(isSelecting ? "\(selection.count)개 선택됨" : store.displayName(for: folder))
         .toolbar { toolbarContent }
+        .safeAreaInset(edge: .bottom) {
+            if isSelecting { selectionBar }
+        }
+        .animation(.default, value: isSelecting)
         .task(id: "\(searchText)-\(store.changeCounter)") { await filterItems() }
         .overlay {
             if isImporting {
@@ -65,9 +74,22 @@ struct NotebookGridView: View {
             }
         }
         .sheet(item: $movingItem) { item in
-            MoveItemSheet(item: item) { target in
+            MoveItemsSheet(items: [item]) { target in
                 attempt { try store.move(item, to: target) }
             }
+        }
+        .sheet(isPresented: $isMovingSelection) {
+            MoveItemsSheet(items: selectedItems) { target in
+                moveSelected(to: target)
+            }
+        }
+        .confirmationDialog(
+            "선택한 \(selection.count)개 항목을 삭제할까요?",
+            isPresented: $showDeleteConfirmation, titleVisibility: .visible
+        ) {
+            Button("삭제", role: .destructive) { deleteSelected() }
+        } message: {
+            Text("폴더를 삭제하면 안의 노트도 함께 삭제됩니다.")
         }
         .alert("새 폴더", isPresented: $showNewFolder) {
             TextField("폴더 이름", text: $newFolderName)
@@ -96,7 +118,11 @@ struct NotebookGridView: View {
             case .failure(let error): errorMessage = error.localizedDescription
             }
         }
-        .task(id: store.changeCounter) { items = store.items(in: folder) }
+        .task(id: store.changeCounter) {
+            items = store.items(in: folder)
+            // 밖에서 지워지거나 이동한 항목은 선택에서 뺀다.
+            selection.formIntersection(items.map(\.url))
+        }
         .task { await openDebugSampleIfRequested() }
     }
 
@@ -128,18 +154,94 @@ struct NotebookGridView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button {
-                withAnimation { isSearchVisible.toggle() }
-                if !isSearchVisible { searchText = "" }
-            } label: {
-                Label("검색", systemImage: "magnifyingglass")
+        if isSelecting {
+            ToolbarItemGroup(placement: .primaryAction) {
+                let shown = searchText.isEmpty ? items : filteredItems
+                let allSelected = !shown.isEmpty && shown.allSatisfy { selection.contains($0.url) }
+                Button(allSelected ? "선택 해제" : "전체 선택") {
+                    if allSelected { selection.removeAll() } else { selection = Set(shown.map(\.url)) }
+                }
+                .disabled(shown.isEmpty)
+                Button("완료") { endSelecting() }
+                    .adaptiveProminentButtonStyle()
             }
-            .keyboardShortcut("f", modifiers: .command)
-            Button { showImporter = true } label: { Label("가져오기", systemImage: "square.and.arrow.down") }
-            Button { showNewFolder = true } label: { Label("새 폴더", systemImage: "folder.badge.plus") }
-            Button { showNewNotebook = true } label: { Label("새 노트", systemImage: "plus") }
+        } else {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    withAnimation { isSearchVisible.toggle() }
+                    if !isSearchVisible { searchText = "" }
+                } label: {
+                    Label("검색", systemImage: "magnifyingglass")
+                }
+                .keyboardShortcut("f", modifiers: .command)
+                Button { isSelecting = true } label: { Label("선택", systemImage: "checkmark.circle") }
+                    .disabled(items.isEmpty)
+                Button { showImporter = true } label: { Label("가져오기", systemImage: "square.and.arrow.down") }
+                Button { showNewFolder = true } label: { Label("새 폴더", systemImage: "folder.badge.plus") }
+                Button { showNewNotebook = true } label: { Label("새 노트", systemImage: "plus") }
+            }
         }
+    }
+
+    /// 선택 모드 하단 바: 이동·삭제.
+    private var selectionBar: some View {
+        HStack(spacing: 28) {
+            Button { isMovingSelection = true } label: { Label("이동", systemImage: "folder") }
+            Button(role: .destructive) { showDeleteConfirmation = true } label: { Label("삭제", systemImage: "trash") }
+                .tint(.red)
+        }
+        .buttonStyle(.plain)
+        .font(.body.weight(.medium))
+        .foregroundStyle(selection.isEmpty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.tint))
+        .disabled(selection.isEmpty)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 12)
+        .adaptiveGlassCapsule()
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 8)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    // MARK: - Selection
+
+    private var selectedItems: [LibraryItem] { items.filter { selection.contains($0.url) } }
+
+    private func selectionState(for item: LibraryItem) -> LibraryItemCell.SelectionState {
+        guard isSelecting else { return .none }
+        return selection.contains(item.url) ? .selected : .unselected
+    }
+
+    private func toggleSelection(_ item: LibraryItem) {
+        if selection.contains(item.url) { selection.remove(item.url) } else { selection.insert(item.url) }
+    }
+
+    private func endSelecting() {
+        isSelecting = false
+        selection.removeAll()
+    }
+
+    private func deleteSelected() {
+        var failed: [String] = []
+        for item in selectedItems {
+            do { try delete(item) } catch { failed.append(item.name) }
+        }
+        if !failed.isEmpty { errorMessage = "삭제하지 못했습니다: \(failed.joined(separator: ", "))" }
+        endSelecting()
+    }
+
+    private func moveSelected(to target: URL) {
+        var failed: [String] = []
+        for item in selectedItems {
+            do { try store.move(item, to: target) } catch { failed.append(item.name) }
+        }
+        if !failed.isEmpty { errorMessage = "이동하지 못했습니다: \(failed.joined(separator: ", "))" }
+        endSelecting()
+    }
+
+    /// 항목을 지우고, 열려 있던 탭도 닫는다.
+    private func delete(_ item: LibraryItem) throws {
+        try store.delete(item)
+        if item.kind == .notebook { router.closeTab(item.url) }
     }
 
     @ViewBuilder
@@ -148,7 +250,7 @@ struct NotebookGridView: View {
         Button { attempt { try store.duplicate(item) } } label: { Label("복제", systemImage: "plus.square.on.square") }
         Button { movingItem = item } label: { Label("이동", systemImage: "folder") }
         Divider()
-        Button(role: .destructive) { attempt { try store.delete(item) } } label: { Label("삭제", systemImage: "trash") }
+        Button(role: .destructive) { attempt { try delete(item) } } label: { Label("삭제", systemImage: "trash") }
     }
 
     /// 제목과 매니페스트의 인식 텍스트로 노트를 거른다. 폴더는 이름으로만 거른다.
@@ -200,13 +302,31 @@ struct NotebookGridView: View {
 
 /// 그리드 셀. 노트북은 썸네일, 폴더는 아이콘.
 struct LibraryItemCell: View {
+    enum SelectionState { case none, unselected, selected }
+
     let item: LibraryItem
+    var selectionState: SelectionState = .none
     @State private var thumbnail: UIImage?
 
     var body: some View {
         VStack(spacing: 8) {
             // 썸네일은 노트 용지 방향(가로/세로)에 맞는 비율로 보이고, 셀 높이만 맞춘다.
             preview
+                .overlay(alignment: .topTrailing) {
+                    if selectionState != .none {
+                        Image(systemName: selectionState == .selected ? "checkmark.circle.fill" : "circle")
+                            .font(.title2)
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, selectionState == .selected ? Color.accentColor : Color.secondary)
+                            .shadow(radius: 1)
+                            .padding(8)
+                    }
+                }
+                .overlay {
+                    if selectionState == .selected {
+                        RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor, lineWidth: 3)
+                    }
+                }
                 .frame(maxWidth: .infinity)
                 .frame(height: 150)
             Text(item.name)
@@ -219,6 +339,7 @@ struct LibraryItemCell: View {
             }
         }
         .task(id: item.modifiedAt) { await loadThumbnail() }
+        .accessibilityAddTraits(selectionState == .selected ? .isSelected : [])
     }
 
     @ViewBuilder
@@ -268,9 +389,9 @@ struct LibraryItemCell: View {
     }
 }
 
-/// 이동 대상 폴더 선택.
-struct MoveItemSheet: View {
-    let item: LibraryItem
+/// 이동 대상 폴더 선택. 선택한 항목 자신(과 그 안), 현재 폴더는 고를 수 없다.
+struct MoveItemsSheet: View {
+    let items: [LibraryItem]
     let onSelect: (URL) -> Void
     @Environment(DocumentStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -284,9 +405,9 @@ struct MoveItemSheet: View {
                 } label: {
                     Label(store.displayName(for: url), systemImage: url == store.rootURL ? "house" : "folder")
                 }
-                .disabled(url == item.url || url == item.url.deletingLastPathComponent())
+                .disabled(items.contains { url == $0.url || url.path.hasPrefix($0.url.path + "/") || url == $0.url.deletingLastPathComponent() })
             }
-            .navigationTitle("“\(item.name)” 이동")
+            .navigationTitle(items.count == 1 ? "“\(items[0].name)” 이동" : "\(items.count)개 항목 이동")
             .toolbar { Button("취소") { dismiss() } }
         }
     }
