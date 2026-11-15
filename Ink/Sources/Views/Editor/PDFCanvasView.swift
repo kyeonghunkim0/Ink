@@ -9,8 +9,14 @@ struct PDFCanvasView: UIViewRepresentable {
     func makeUIView(context: Context) -> ResponderPDFView {
         let view = ResponderPDFView()
         view.autoScales = true
-        view.displayMode = model.isWhiteboard ? .singlePage : .singlePageContinuous
-        view.displayDirection = .vertical
+        view.displayMode = .singlePage
+        if model.isWhiteboard {
+            view.displayDirection = .vertical
+        } else {
+            // 노트북은 한 번에 한 페이지만 보이는 가로 캐러셀.
+            view.displayDirection = .horizontal
+            view.usePageViewController(true, withViewOptions: [UIPageViewController.OptionsKey.interPageSpacing: 24])
+        }
         view.pageShadowsEnabled = true
         view.isFingerDrawingEnabled = model.isFingerDrawingEnabled
         view.backgroundColor = .secondarySystemBackground
