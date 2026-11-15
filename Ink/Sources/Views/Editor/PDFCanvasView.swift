@@ -28,6 +28,7 @@ struct PDFCanvasView: UIViewRepresentable {
         view.accessibilityIdentifier = "editor.pdfView"
         context.coordinator.pdfView = view
         view.onDidMoveToWindow = { [weak coordinator = context.coordinator] in coordinator?.showToolPickerIfPossible() }
+        view.onSwipePastLastPage = { [weak coordinator = context.coordinator] in coordinator?.appendPageAfterLast() }
 
         NotificationCenter.default.addObserver(
             context.coordinator, selector: #selector(Coordinator.pageChanged), name: .PDFViewPageChanged, object: view)
@@ -221,6 +222,12 @@ struct PDFCanvasView: UIViewRepresentable {
             tool is PKInkingTool
         }
 
+        /// 마지막 페이지에서 왼쪽으로 더 넘기면 새 페이지를 뒤에 추가하고 그 페이지로 간다.
+        func appendPageAfterLast() {
+            guard !model.isWhiteboard, model.pageCount > 0 else { return }
+            model.addPage(after: model.pageCount - 1)
+        }
+
         @objc func pageChanged() {
             guard let pdfView, let page = pdfView.currentPage, let doc = pdfView.document else { return }
             let index = doc.index(for: page)
@@ -333,9 +340,70 @@ final class ResponderPDFView: PDFView {
         didSet { if isFingerDrawingEnabled != oldValue { tuneScrollViews() } }
     }
 
+    /// 마지막 페이지에서 다음 페이지 방향으로 넘기려 했을 때 호출된다.
+    var onSwipePastLastPage: (() -> Void)?
+    private var observedPans: Set<ObjectIdentifier> = []
+    private var panStartedOnLastPage = false
+
+    /// 페이지가 한 장뿐이면 페이지 뷰 컨트롤러의 스크롤 뷰가 팬을 받지 않으므로, 뷰 자체에서 왼쪽 스와이프를 감지한다.
+    private lazy var singlePageSwipe: UISwipeGestureRecognizer = {
+        let swipe = UISwipeGestureRecognizer(target: self, action: #selector(handleSinglePageSwipe))
+        swipe.direction = .left
+        swipe.allowedTouchTypes = [UITouch.TouchType.direct.rawValue as NSNumber]
+        swipe.cancelsTouchesInView = false
+        swipe.delaysTouchesEnded = false
+        return swipe
+    }()
+
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if window != nil { onDidMoveToWindow?() }
+        if window != nil {
+            onDidMoveToWindow?()
+            if singlePageSwipe.view == nil { addGestureRecognizer(singlePageSwipe) }
+        }
+    }
+
+    @objc private func handleSinglePageSwipe() {
+        guard displayDirection == .horizontal, document?.pageCount == 1 else { return }
+        onSwipePastLastPage?()
+    }
+
+    @objc private func handlePagePan(_ pan: UIPanGestureRecognizer) {
+        switch pan.state {
+        case .began:
+            panStartedOnLastPage = isOnLastPage
+        case .ended:
+            guard panStartedOnLastPage, displayDirection == .horizontal else { return }
+            let translation = pan.translation(in: self).x
+            let velocity = pan.velocity(in: self).x
+            // 왼쪽으로 충분히 끌었고 되돌리는 중이 아니면 다음 페이지를 요청한 것으로 본다.
+            if translation < -60, velocity <= 0 {
+                // 되돌아가는 바운스 애니메이션이 끝난 뒤에 추가해야 페이지 뷰 컨트롤러가 중간에 멈추지 않는다.
+                whenSettled(pan.view as? UIScrollView) { [weak self] in self?.onSwipePastLastPage?() }
+            }
+            panStartedOnLastPage = false
+        case .cancelled, .failed:
+            panStartedOnLastPage = false
+        default:
+            break
+        }
+    }
+
+    /// 스크롤 뷰의 드래그·감속·바운스가 모두 끝나면 실행한다.
+    private func whenSettled(_ scrollView: UIScrollView?, attempt: Int = 0, _ body: @escaping () -> Void) {
+        let busy = scrollView.map { $0.isDragging || $0.isDecelerating || $0.isTracking } ?? false
+        if !busy || attempt > 20 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { body() }
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                self?.whenSettled(scrollView, attempt: attempt + 1, body)
+            }
+        }
+    }
+
+    private var isOnLastPage: Bool {
+        guard let document, let page = currentPage else { return false }
+        return document.index(for: page) == document.pageCount - 1
     }
 
     /// 다음 레이아웃에서 문서 전체가 보이도록 배율을 맞춘다(화이트보드 초기 열기).
@@ -362,7 +430,13 @@ final class ResponderPDFView: PDFView {
                 let direct = [UITouch.TouchType.direct.rawValue as NSNumber]
                 scrollView.panGestureRecognizer.allowedTouchTypes = direct
                 scrollView.panGestureRecognizer.minimumNumberOfTouches = isFingerDrawingEnabled ? 2 : 1
+                singlePageSwipe.numberOfTouchesRequired = isFingerDrawingEnabled ? 2 : 1
                 scrollView.pinchGestureRecognizer?.allowedTouchTypes = direct
+                let id = ObjectIdentifier(scrollView.panGestureRecognizer)
+                if !observedPans.contains(id) {
+                    observedPans.insert(id)
+                    scrollView.panGestureRecognizer.addTarget(self, action: #selector(handlePagePan))
+                }
             }
             if view is PKCanvasView { continue }
             queue.append(contentsOf: view.subviews)
