@@ -86,8 +86,13 @@ final class DocumentStore {
             }
             let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .contentModificationDateKey])
             guard values?.isDirectory == true else { continue }
-            let date = values?.contentModificationDate ?? .distantPast
+            var date = values?.contentModificationDate ?? .distantPast
             if url.pathExtension == NotebookPackage.fileExtension {
+                // 패키지 안의 파일만 바뀌면 디렉터리 수정일은 그대로이므로 매니페스트 수정일도 본다.
+                let manifestURL = url.appendingPathComponent(NotebookPackage.manifestName)
+                if let inner = (try? manifestURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate {
+                    date = max(date, inner)
+                }
                 items.append(LibraryItem(url: url, kind: .notebook, modifiedAt: date))
             } else {
                 items.append(LibraryItem(url: url, kind: .folder, modifiedAt: date))

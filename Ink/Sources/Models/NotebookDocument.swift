@@ -66,6 +66,11 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
         touch()
     }
 
+    /// 첫 페이지의 객체가 바뀌면 라이브러리 썸네일을 다시 만든다.
+    func invalidateThumbnail(for pageID: UUID) {
+        if manifest.pages.first?.id == pageID { thumbnailDirty = true }
+    }
+
     func addRecording(_ info: RecordingInfo, temporaryURL: URL) {
         manifest.recordings.append(info)
         pendingAudio[info.fileName] = temporaryURL

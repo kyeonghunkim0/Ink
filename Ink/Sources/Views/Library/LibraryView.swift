@@ -32,8 +32,12 @@ struct LibraryView: View {
         }
         .onChange(of: selectedFolder) { _, _ in router.popToRoot() }
         .onChange(of: router.isEditorPresented) { _, presented in
-            // 편집기를 내리면 썸네일·수정일을 다시 읽는다.
-            if !presented { store.refresh() }
+            // 편집기를 내리면 열린 문서를 먼저 저장한 뒤 썸네일·수정일을 다시 읽는다.
+            guard !presented else { return }
+            Task {
+                await router.saveAllOpen()
+                store.refresh()
+            }
         }
     }
 }

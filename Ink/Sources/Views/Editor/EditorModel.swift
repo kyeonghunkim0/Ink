@@ -311,6 +311,7 @@ final class EditorModel {
 
     private func bumpThumbnail(for pageID: UUID) {
         drawingVersions[pageID, default: 0] += 1
+        document?.invalidateThumbnail(for: pageID)
     }
 
     // MARK: - Pages

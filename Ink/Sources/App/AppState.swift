@@ -52,6 +52,11 @@ final class Router {
         if openNotebooks.isEmpty { isEditorPresented = false }
     }
 
+    /// 열려 있는 모든 탭의 문서를 저장한다.
+    func saveAllOpen() async {
+        for model in sessions.values { await model.save() }
+    }
+
     /// 모든 탭을 닫는다.
     func closeAllTabs() {
         for url in openNotebooks { closeTab(url) }
