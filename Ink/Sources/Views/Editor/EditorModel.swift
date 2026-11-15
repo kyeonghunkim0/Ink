@@ -36,6 +36,7 @@ final class EditorModel {
     private(set) var navigationToken = 0
     /// 페이지별 필기 변경 횟수. 썸네일 갱신에 사용.
     private(set) var drawingVersions: [UUID: Int] = [:]
+    /// 손가락 필기. 기본은 꺼짐(애플 펜슬만 인식).
     var isFingerDrawingEnabled = CommandLine.arguments.contains("--finger")
     /// 객체 모드: 켜면 필기 대신 이미지/텍스트/스티커를 선택·이동·편집한다.
     var isObjectModeEnabled = false {
@@ -67,7 +68,7 @@ final class EditorModel {
     var pageCount: Int { manifest.pages.count }
     var isWhiteboard: Bool { manifest.kind == .whiteboard }
 
-    var drawingPolicy: PKCanvasViewDrawingPolicy { isFingerDrawingEnabled ? .anyInput : .default }
+    var drawingPolicy: PKCanvasViewDrawingPolicy { isFingerDrawingEnabled ? .anyInput : .pencilOnly }
 
     var playbackFilter: PlaybackFilter? {
         guard let id = recorder.playingRecordingID,
