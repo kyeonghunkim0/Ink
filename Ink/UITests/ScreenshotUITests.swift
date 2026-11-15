@@ -19,7 +19,9 @@ final class ScreenshotUITests: XCTestCase {
         sleep(3)
         snapshot("02-Editor")
 
-        // 2쪽(그래프)로 이동
+        // 페이지 목록을 열고 2쪽(그래프)로 이동
+        app.buttons["페이지 목록"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["2"].firstMatch.waitForExistence(timeout: 5))
         app.staticTexts["2"].firstMatch.tap()
         sleep(2)
         snapshot("03-Graph")

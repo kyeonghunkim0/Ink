@@ -91,7 +91,7 @@ struct EditorView: View {
 /// 열린 문서의 편집 UI.
 struct EditorContent: View {
     @Bindable var model: EditorModel
-    @State private var showThumbnails = true
+    @State private var showThumbnails = false
     @State private var shareItem: ShareItem?
     @State private var isExporting = false
     @State private var photoItem: PhotosPickerItem?
