@@ -26,6 +26,8 @@ final class Router {
     }
 
     func openEditor(_ url: URL) {
+        // 디렉터리 목록에서 온 URL은 끝에 '/'가 붙어 생성 시 URL과 달라진다. 같은 노트가 탭 두 개로 열리지 않도록 정규화한다.
+        let url = url.normalizedFileURL
         if !openNotebooks.contains(url) { openNotebooks.append(url) }
         activeNotebook = url
         isEditorPresented = true
@@ -41,6 +43,7 @@ final class Router {
 
     /// 탭을 닫고 문서를 저장·해제한다. 마지막 탭이면 편집기를 내린다.
     func closeTab(_ url: URL) {
+        let url = url.normalizedFileURL
         guard let index = openNotebooks.firstIndex(of: url) else { return }
         openNotebooks.remove(at: index)
         if let model = sessions.removeValue(forKey: url) {
@@ -69,4 +72,11 @@ final class Router {
 
 extension URL: @retroactive Identifiable {
     public var id: String { absoluteString }
+}
+
+extension URL {
+    /// 끝의 '/'와 `.`/`..`를 제거한 파일 URL. 같은 경로를 가리키는 URL끼리 `==`가 성립하도록 맞춘다.
+    var normalizedFileURL: URL {
+        URL(fileURLWithPath: standardizedFileURL.path, isDirectory: false)
+    }
 }

@@ -117,6 +117,19 @@ struct PageObject: Codable, Identifiable, Hashable, Sendable {
     var frame: CGRect
     var fontSize: CGFloat = 20
 
+    init(pageID: UUID, kind: PageObjectKind, frame: CGRect, fontSize: CGFloat = 20) {
+        self.pageID = pageID; self.kind = kind; self.frame = frame; self.fontSize = fontSize
+    }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        pageID = try c.decode(UUID.self, forKey: .pageID)
+        kind = try c.decode(PageObjectKind.self, forKey: .kind)
+        frame = try c.decode(CGRect.self, forKey: .frame)
+        fontSize = try c.decodeIfPresent(CGFloat.self, forKey: .fontSize) ?? 20
+    }
+
     var isText: Bool { if case .text = kind { return true } else { return false } }
 }
 
@@ -141,6 +154,29 @@ struct NotebookManifest: Codable, Hashable, Sendable {
     var recognizedText: [UUID: String] = [:]
 
     var pageSize: CGSize { paperSize.size(landscape: isLandscape) }
+
+    init(title: String) {
+        self.title = title
+    }
+
+    /// 예전 빌드가 쓴 매니페스트에는 나중에 추가된 키가 없다. 없는 키는 기본값으로 읽어 기존 노트가 계속 열리게 한다.
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decodeIfPresent(Int.self, forKey: .version) ?? Self.currentVersion
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        kind = try c.decodeIfPresent(NotebookKind.self, forKey: .kind) ?? .notebook
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        modifiedAt = try c.decodeIfPresent(Date.self, forKey: .modifiedAt) ?? createdAt
+        paperSize = try c.decodeIfPresent(PaperSize.self, forKey: .paperSize) ?? .a4
+        paperColor = try c.decodeIfPresent(PaperColor.self, forKey: .paperColor) ?? .white
+        isLandscape = try c.decodeIfPresent(Bool.self, forKey: .isLandscape) ?? false
+        defaultTemplate = try c.decodeIfPresent(PaperTemplate.self, forKey: .defaultTemplate) ?? .blank
+        pages = try c.decodeIfPresent([PageInfo].self, forKey: .pages) ?? []
+        recordings = try c.decodeIfPresent([RecordingInfo].self, forKey: .recordings) ?? []
+        objects = try c.decodeIfPresent([PageObject].self, forKey: .objects) ?? []
+        recognizedText = try c.decodeIfPresent([UUID: String].self, forKey: .recognizedText) ?? [:]
+    }
 
     static let encoder: JSONEncoder = {
         let e = JSONEncoder()
