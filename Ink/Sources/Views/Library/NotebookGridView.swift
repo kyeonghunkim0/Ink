@@ -205,31 +205,10 @@ struct LibraryItemCell: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.quaternary)
-                    .aspectRatio(0.75, contentMode: .fit)
-                switch item.kind {
-                case .folder:
-                    Image(systemName: "folder.fill")
-                        .font(.system(size: 56))
-                        .foregroundStyle(.tint)
-                case .notebook:
-                    if let thumbnail {
-                        Image(uiImage: thumbnail)
-                            .resizable()
-                            .scaledToFit()
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .shadow(radius: 2, y: 1)
-                    } else if item.isDownloading {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "doc.text")
-                            .font(.system(size: 48))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
+            // 썸네일은 노트 용지 방향(가로/세로)에 맞는 비율로 보이고, 셀 높이만 맞춘다.
+            preview
+                .frame(maxWidth: .infinity)
+                .frame(height: 150)
             Text(item.name)
                 .font(.callout)
                 .lineLimit(2)
@@ -240,6 +219,43 @@ struct LibraryItemCell: View {
             }
         }
         .task(id: item.modifiedAt) { await loadThumbnail() }
+    }
+
+    @ViewBuilder
+    private var preview: some View {
+        switch item.kind {
+        case .folder:
+            placeholder(aspectRatio: 1) {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.tint)
+            }
+        case .notebook:
+            if let thumbnail {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .shadow(radius: 2, y: 1)
+            } else {
+                placeholder(aspectRatio: 4 / 3) {
+                    if item.isDownloading {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "doc.text")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private func placeholder<Content: View>(aspectRatio: CGFloat, @ViewBuilder content: () -> Content) -> some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(.quaternary)
+            .aspectRatio(aspectRatio, contentMode: .fit)
+            .overlay { content() }
     }
 
     private func loadThumbnail() async {
