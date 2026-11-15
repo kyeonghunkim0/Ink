@@ -219,7 +219,8 @@ final class EditorModel {
                 let image = UIGraphicsImageRenderer(size: bounds.size, format: format).image { ctx in
                     UIColor.white.setFill()
                     ctx.fill(CGRect(origin: .zero, size: bounds.size))
-                    drawing.image(from: CGRect(origin: .zero, size: bounds.size), scale: 2)
+                    // 다크 모드에서 잉크가 흰색으로 뒤집히지 않도록 라이트 테마로 고정한다.
+                    Exporter.inkImage(drawing, from: CGRect(origin: .zero, size: bounds.size), scale: 2, paperColor: .white)
                         .draw(in: CGRect(origin: .zero, size: bounds.size))
                 }
                 guard let cg = image.cgImage else { continue }

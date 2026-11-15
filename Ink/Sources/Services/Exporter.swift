@@ -35,6 +35,15 @@ enum PageObjectRenderer {
 
 /// 배경 PDF와 필기를 합성해 내보낸다.
 enum Exporter {
+    /// PencilKit은 다크 모드에서 검정 잉크를 흰색으로 뒤집어 그리므로, 용지 색에 맞는 테마로 고정해 래스터화한다.
+    static func inkImage(_ drawing: PKDrawing, from rect: CGRect, scale: CGFloat, paperColor: PaperColor) -> UIImage {
+        let style: UIUserInterfaceStyle = paperColor == .dark ? .dark : .light
+        var image = UIImage()
+        UITraitCollection(userInterfaceStyle: style).performAsCurrent {
+            image = drawing.image(from: rect, scale: scale)
+        }
+        return image
+    }
     /// 한 페이지를 이미지로 렌더링한다. `scale`은 포인트당 픽셀 수.
     static func renderPage(document: NotebookDocument, pageIndex: Int, scale: CGFloat) -> UIImage? {
         guard let page = document.pdfDocument.page(at: pageIndex),
@@ -55,7 +64,7 @@ enum Exporter {
             page.draw(with: .mediaBox, to: cg)
             cg.restoreGState()
             PageObjectRenderer.drawAll(for: document.manifest.pages[pageIndex].id, document: document, in: cg)
-            let ink = drawing.image(from: CGRect(origin: .zero, size: bounds.size), scale: scale)
+            let ink = inkImage(drawing, from: CGRect(origin: .zero, size: bounds.size), scale: scale, paperColor: document.manifest.paperColor)
             ink.draw(in: CGRect(origin: .zero, size: bounds.size))
         }
     }
@@ -86,7 +95,7 @@ enum Exporter {
             cg.restoreGState()
             PageObjectRenderer.drawAll(for: document.manifest.pages[index].id, document: document, in: cg)
             let drawing = document.drawing(for: document.manifest.pages[index].id)
-            let ink = drawing.image(from: pageRect, scale: 3)
+            let ink = inkImage(drawing, from: pageRect, scale: 3, paperColor: document.manifest.paperColor)
             ink.draw(in: pageRect)
         }
         UIGraphicsEndPDFContext()
