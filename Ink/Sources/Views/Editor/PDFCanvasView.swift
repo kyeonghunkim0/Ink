@@ -12,6 +12,7 @@ struct PDFCanvasView: UIViewRepresentable {
         view.displayMode = model.isWhiteboard ? .singlePage : .singlePageContinuous
         view.displayDirection = .vertical
         view.pageShadowsEnabled = true
+        view.isFingerDrawingEnabled = model.isFingerDrawingEnabled
         view.backgroundColor = .secondarySystemBackground
         view.pageOverlayViewProvider = context.coordinator
         view.isInMarkupMode = true
@@ -96,6 +97,7 @@ struct PDFCanvasView: UIViewRepresentable {
             if appliedPolicy != model.drawingPolicy {
                 appliedPolicy = model.drawingPolicy
                 for canvas in canvases { canvas.drawingPolicy = model.drawingPolicy }
+                (pdfView as? ResponderPDFView)?.isFingerDrawingEnabled = model.isFingerDrawingEnabled
             }
 
             if appliedObjectsVersion != model.objectsVersion {
@@ -266,8 +268,13 @@ struct PDFCanvasView: UIViewRepresentable {
 }
 
 /// 윈도우에 붙는 시점을 알려주는 PDFView. 첫 응답자는 페이지 캔버스가 맡는다.
+/// 내부 스크롤 뷰의 제스처를 손가락 전용으로 바꿔 펜 입력이 지연 없이 캔버스로 가게 한다.
 final class ResponderPDFView: PDFView {
     var onDidMoveToWindow: (() -> Void)?
+    /// 손가락 필기 중에는 두 손가락으로만 스크롤/페이지 넘김을 한다.
+    var isFingerDrawingEnabled = false {
+        didSet { if isFingerDrawingEnabled != oldValue { tuneScrollViews() } }
+    }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
@@ -285,6 +292,23 @@ final class ResponderPDFView: PDFView {
             minScaleFactor = max(fit * 0.4, 0.05)
             maxScaleFactor = max(fit * 6, 4)
             scaleFactor = fit
+        }
+        tuneScrollViews()
+    }
+
+    private func tuneScrollViews() {
+        var queue: [UIView] = [self]
+        while let view = queue.popLast() {
+            if let scrollView = view as? UIScrollView {
+                scrollView.delaysContentTouches = false
+                scrollView.canCancelContentTouches = false
+                let direct = [UITouch.TouchType.direct.rawValue as NSNumber]
+                scrollView.panGestureRecognizer.allowedTouchTypes = direct
+                scrollView.panGestureRecognizer.minimumNumberOfTouches = isFingerDrawingEnabled ? 2 : 1
+                scrollView.pinchGestureRecognizer?.allowedTouchTypes = direct
+            }
+            if view is PKCanvasView { continue }
+            queue.append(contentsOf: view.subviews)
         }
     }
 }
