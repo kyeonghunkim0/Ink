@@ -1,4 +1,5 @@
 import SwiftUI
+import PencilKit
 
 /// 하단 페이지 썸네일 목록. 탭으로 이동, 길게 눌러 삭제/이동.
 struct PageThumbnailStrip: View {
@@ -13,6 +14,7 @@ struct PageThumbnailStrip: View {
                             model: model, pageID: page.id, index: index,
                             version: model.drawingVersions[page.id, default: 0],
                             structureVersion: model.structureVersion,
+                            objectsVersion: model.objectsVersion,
                             isCurrent: index == model.currentPageIndex)
                         .id(page.id)
                         .onTapGesture { model.goToPage(index) }
@@ -53,8 +55,11 @@ struct PageThumbnailCell: View {
     let index: Int
     let version: Int
     let structureVersion: Int
+    let objectsVersion: Int
     let isCurrent: Bool
     @State private var image: UIImage?
+    /// 배경(PDF + 객체) 캐시. 페이지 구조나 객체가 바뀔 때만 다시 그린다.
+    @State private var background: (key: String, image: UIImage)?
 
     var body: some View {
         VStack(spacing: 4) {
@@ -73,9 +78,18 @@ struct PageThumbnailCell: View {
             }
             Text("\(index + 1)").font(.caption2).foregroundStyle(isCurrent ? .primary : .secondary)
         }
-        .task(id: "\(version)-\(structureVersion)") {
-            guard let document = model.document else { return }
-            image = Exporter.thumbnail(for: document, pageIndex: index, maxDimension: 160)
+        .task(id: "\(version)-\(structureVersion)-\(objectsVersion)") { render() }
+    }
+
+    /// 배경은 캐시하고 필기만 다시 얹어, 획마다 PDF를 다시 그리지 않는다.
+    private func render() {
+        guard let document = model.document else { return }
+        let key = "\(structureVersion)-\(objectsVersion)"
+        if background?.key != key {
+            guard let bg = Exporter.renderBackground(document: document, pageIndex: index, maxDimension: 160) else { return }
+            background = (key, bg)
         }
+        guard let bg = background?.image else { return }
+        image = Exporter.composite(background: bg, drawing: document.drawing(for: pageID), paperColor: document.manifest.paperColor)
     }
 }

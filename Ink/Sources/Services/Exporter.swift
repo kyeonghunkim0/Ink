@@ -69,6 +69,40 @@ enum Exporter {
         }
     }
 
+    /// 필기를 뺀 배경(PDF 페이지 + 객체)만 렌더링한다. 썸네일 스트립이 캐시해 두고 필기만 다시 얹는다.
+    static func renderBackground(document: NotebookDocument, pageIndex: Int, maxDimension: CGFloat) -> UIImage? {
+        guard let page = document.pdfDocument.page(at: pageIndex),
+              document.manifest.pages.indices.contains(pageIndex) else { return nil }
+        let bounds = page.bounds(for: .mediaBox)
+        let scale = maxDimension / max(bounds.width, bounds.height)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: bounds.size, format: format).image { ctx in
+            let cg = ctx.cgContext
+            UIColor.white.setFill()
+            cg.fill(CGRect(origin: .zero, size: bounds.size))
+            cg.saveGState()
+            cg.translateBy(x: 0, y: bounds.height)
+            cg.scaleBy(x: 1, y: -1)
+            page.draw(with: .mediaBox, to: cg)
+            cg.restoreGState()
+            PageObjectRenderer.drawAll(for: document.manifest.pages[pageIndex].id, document: document, in: cg)
+        }
+    }
+
+    /// 캐시한 배경 위에 필기를 얹는다. 배경 렌더보다 훨씬 싸서 획마다 호출해도 된다.
+    static func composite(background: UIImage, drawing: PKDrawing, paperColor: PaperColor) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = background.scale
+        format.opaque = true
+        let rect = CGRect(origin: .zero, size: background.size)
+        return UIGraphicsImageRenderer(size: background.size, format: format).image { _ in
+            background.draw(in: rect)
+            inkImage(drawing, from: rect, scale: background.scale, paperColor: paperColor).draw(in: rect)
+        }
+    }
+
     static func thumbnail(for document: NotebookDocument, pageIndex: Int, maxDimension: CGFloat) -> UIImage? {
         guard let page = document.pdfDocument.page(at: pageIndex) else { return nil }
         let bounds = page.bounds(for: .mediaBox)
