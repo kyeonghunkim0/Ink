@@ -204,17 +204,8 @@ struct EditorContent: View {
                 Label("삽입", systemImage: "plus.square.on.square")
             }
 
-            Menu {
-                Button { model.requestEdit(.copy) } label: { Label("복사", systemImage: "doc.on.doc") }
-                    .keyboardShortcut("c", modifiers: .command)
-                Button { model.requestEdit(.cut) } label: { Label("잘라내기", systemImage: "scissors") }
-                    .keyboardShortcut("x", modifiers: .command)
-                Button { model.requestEdit(.paste) } label: { Label("붙여넣기", systemImage: "doc.on.clipboard") }
-                    .keyboardShortcut("v", modifiers: .command)
-                Divider()
-                Button(role: .destructive) { showClearConfirm = true } label: { Label("페이지 전체 지우기", systemImage: "trash") }
-            } label: {
-                Label("편집", systemImage: "lasso")
+            Button(role: .destructive) { showClearConfirm = true } label: {
+                Label("페이지 전체 지우기", systemImage: "trash")
             }
 
             Toggle(isOn: $model.isObjectModeEnabled) {

@@ -20,11 +20,6 @@ struct PlaybackFilter: Equatable {
     }
 }
 
-/// 캔버스 편집 명령.
-enum CanvasEditAction: Equatable {
-    case copy, cut, paste
-}
-
 /// 편집기 상태. 문서 열기/저장, 페이지 조작, 녹음, 내보내기를 담당한다.
 @MainActor
 @Observable
@@ -43,8 +38,6 @@ final class EditorModel {
     private(set) var drawingVersions: [UUID: Int] = [:]
     /// 손가락 필기. 기본은 꺼짐(애플 펜슬만 인식).
     var isFingerDrawingEnabled = CommandLine.arguments.contains("--finger")
-    /// 캔버스 편집 명령(복사/잘라내기/붙여넣기). 캔버스 뷰가 토큰 변화로 소비한다.
-    private(set) var editRequest: (token: Int, action: CanvasEditAction) = (0, .copy)
     /// 객체 모드: 켜면 필기 대신 이미지/텍스트/스티커를 선택·이동·편집한다.
     var isObjectModeEnabled = false {
         didSet { if !isObjectModeEnabled { selectedObjectID = nil } }
@@ -124,11 +117,6 @@ final class EditorModel {
 
     func zoom(by delta: Int) {
         zoomRequest = (zoomRequest.token + 1, delta)
-    }
-
-    /// 현재 페이지 캔버스에 올가미 선택 복사/잘라내기/붙여넣기를 요청한다.
-    func requestEdit(_ action: CanvasEditAction) {
-        editRequest = (editRequest.token + 1, action)
     }
 
     /// 현재 페이지의 필기와 객체를 모두 지운다.
