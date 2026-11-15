@@ -5,6 +5,7 @@ struct LibraryView: View {
     @Environment(DocumentStore.self) private var store
     @Environment(Router.self) private var router
     @State private var selectedFolder: URL?
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         @Bindable var router = router
@@ -31,6 +32,10 @@ struct LibraryView: View {
                 .environment(router)
         }
         .onChange(of: selectedFolder) { _, _ in router.popToRoot() }
+        // 로컬 폴백에서 iCloud로 전환되면 루트가 바뀌므로 선택 폴더를 새 루트로 되돌린다.
+        .onChange(of: store.rootURL) { _, _ in selectedFolder = nil }
+        // 백그라운드에 있는 동안 iCloud가 바꾼 파일을 다시 읽는다.
+        .onChange(of: scenePhase) { _, phase in if phase == .active { store.refresh() } }
         .onChange(of: router.isEditorPresented) { _, presented in
             // 편집기를 내리면 열린 문서를 먼저 저장한 뒤 썸네일·수정일을 다시 읽는다.
             guard !presented else { return }

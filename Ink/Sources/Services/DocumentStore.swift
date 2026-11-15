@@ -39,23 +39,56 @@ final class DocumentStore {
 
     @ObservationIgnored private var query: NSMetadataQuery?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    /// 메타데이터 쿼리가 알고 있는 iCloud 항목. 데몬이 아직 디렉터리에 항목을 만들지 않았을 때 목록을 보강한다.
+    @ObservationIgnored private var knownUbiquitousItems: [String: UbiquitousItem] = [:]
+
+    private struct UbiquitousItem {
+        var url: URL
+        var isFolder: Bool
+        var isDownloaded: Bool
+    }
 
     func start() async {
         guard rootURL == nil else { return }
-        let container = await Task.detached(priority: .userInitiated) {
-            FileManager.default.url(forUbiquityContainerIdentifier: nil)
-        }.value
+        // 콜드 스타트 직후에는 컨테이너 조회가 일시적으로 nil을 돌려줄 수 있어 몇 번 더 시도한다.
+        var container: URL?
+        for delay in [0.0, 0.5, 1.0, 2.0] {
+            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            container = await Self.ubiquityContainer()
+            if container != nil { break }
+        }
         if let container {
-            let docs = container.appendingPathComponent("Documents", isDirectory: true)
-            try? FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
-            rootURL = docs
-            isICloud = true
-            startMetadataQuery()
+            useICloud(container)
         } else {
             let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             rootURL = docs
             isICloud = false
         }
+        changeCounter += 1
+        observers.append(NotificationCenter.default.addObserver(
+            forName: .NSUbiquityIdentityDidChange, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in await self?.recheckContainer() }
+            })
+    }
+
+    private nonisolated static func ubiquityContainer() async -> URL? {
+        await Task.detached(priority: .userInitiated) {
+            FileManager.default.url(forUbiquityContainerIdentifier: nil)
+        }.value
+    }
+
+    private func useICloud(_ container: URL) {
+        let docs = container.appendingPathComponent("Documents", isDirectory: true)
+        try? FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
+        rootURL = docs
+        isICloud = true
+        startMetadataQuery()
+    }
+
+    /// 로컬 폴백 상태에서 iCloud가 나중에 사용 가능해지면 iCloud 저장소로 전환한다.
+    func recheckContainer() async {
+        guard !isICloud, let container = await Self.ubiquityContainer() else { return }
+        useICloud(container)
         changeCounter += 1
     }
 
@@ -97,6 +130,17 @@ final class DocumentStore {
             } else {
                 items.append(LibraryItem(url: url, kind: .folder, modifiedAt: date))
             }
+        }
+        // 메타데이터 쿼리에는 있는데 디렉터리 목록에 아직 없는 항목(동기화 직후)을 내려받는 중으로 보탠다.
+        let folderPath = folder.standardizedFileURL.path
+        let listed = Set(items.map { $0.url.standardizedFileURL.path })
+        for known in knownUbiquitousItems.values
+        where known.url.deletingLastPathComponent().standardizedFileURL.path == folderPath
+            && !listed.contains(known.url.standardizedFileURL.path) {
+            let isNotebook = known.url.pathExtension == NotebookPackage.fileExtension
+            guard isNotebook || known.isFolder else { continue }
+            items.append(LibraryItem(url: known.url, kind: isNotebook ? .notebook : .folder,
+                                     modifiedAt: .distantPast, isDownloading: !known.isDownloaded))
         }
         return items.sorted {
             if $0.kind != $1.kind { return $0.kind == .folder }
@@ -314,13 +358,19 @@ final class DocumentStore {
     private func handleQueryUpdate() {
         guard let query else { return }
         query.disableUpdates()
+        var known: [String: UbiquitousItem] = [:]
         for case let item as NSMetadataItem in query.results {
             guard let url = item.value(forAttribute: NSMetadataItemURLKey) as? URL,
                   let status = item.value(forAttribute: NSMetadataUbiquitousItemDownloadingStatusKey) as? String else { continue }
             if status == NSMetadataUbiquitousItemDownloadingStatusNotDownloaded {
                 try? FileManager.default.startDownloadingUbiquitousItem(at: url)
             }
+            let contentType = item.value(forAttribute: NSMetadataItemContentTypeKey) as? String
+            known[url.standardizedFileURL.path] = UbiquitousItem(
+                url: url, isFolder: contentType == "public.folder",
+                isDownloaded: status != NSMetadataUbiquitousItemDownloadingStatusNotDownloaded)
         }
+        knownUbiquitousItems = known
         query.enableUpdates()
         changeCounter += 1
     }
