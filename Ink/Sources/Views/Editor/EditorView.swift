@@ -96,6 +96,7 @@ struct EditorContent: View {
     @State private var isExporting = false
     @State private var photoItem: PhotosPickerItem?
     @State private var showStickerSheet = false
+    @State private var isSearchVisible = false
     @State private var showClearConfirm = false
 
     var body: some View {
@@ -104,6 +105,13 @@ struct EditorContent: View {
             if showThumbnails && !model.isWhiteboard {
                 PageThumbnailStrip(model: model)
                     .padding(.top, 8)
+            }
+            if isSearchVisible {
+                InlineSearchBar(text: $model.searchText, prompt: "손글씨·텍스트 검색") {
+                    model.searchText = ""
+                    isSearchVisible = false
+                }
+                .padding(.top, showThumbnails && !model.isWhiteboard ? 0 : 8)
             }
             if !model.searchText.isEmpty {
                 SearchResultsBar(model: model)
@@ -123,7 +131,6 @@ struct EditorContent: View {
             Button("페이지 전체 지우기", role: .destructive) { model.clearCurrentPage() }
             Button("취소", role: .cancel) {}
         }
-        .searchable(text: $model.searchText, placement: .toolbar, prompt: "손글씨·텍스트 검색")
         .background {
             // 키보드 줌 단축키(⌘+ / ⌘-). 보이지 않는 버튼으로 등록한다.
             Group {
@@ -217,6 +224,14 @@ struct EditorContent: View {
             Toggle(isOn: $model.isFingerDrawingEnabled) {
                 Label("손가락 필기", systemImage: "hand.draw")
             }
+
+            Button {
+                withAnimation { isSearchVisible.toggle() }
+                if !isSearchVisible { model.searchText = "" }
+            } label: {
+                Label("검색", systemImage: "magnifyingglass")
+            }
+            .keyboardShortcut("f", modifiers: .command)
 
             Button {
                 Task { await model.toggleRecording() }

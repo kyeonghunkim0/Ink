@@ -9,6 +9,7 @@ struct NotebookGridView: View {
     @Environment(Router.self) private var router
     @State private var items: [LibraryItem] = []
     @State private var searchText = ""
+    @State private var isSearchVisible = false
     @State private var filteredItems: [LibraryItem] = []
     @State private var showNewNotebook = false
     @State private var showNewFolder = false
@@ -25,6 +26,13 @@ struct NotebookGridView: View {
     var body: some View {
         let shown = searchText.isEmpty ? items : filteredItems
         return ScrollView {
+            if isSearchVisible {
+                InlineSearchBar(text: $searchText, prompt: "노트 제목·손글씨 검색") {
+                    searchText = ""
+                    isSearchVisible = false
+                }
+                .padding(.top, 12)
+            }
             if shown.isEmpty {
                 ContentUnavailableView(
                     "노트가 없습니다", systemImage: "note.text",
@@ -43,7 +51,6 @@ struct NotebookGridView: View {
         }
         .navigationTitle(store.displayName(for: folder))
         .toolbar { toolbarContent }
-        .searchable(text: $searchText, prompt: "노트 제목·손글씨 검색")
         .task(id: "\(searchText)-\(store.changeCounter)") { await filterItems() }
         .overlay {
             if isImporting {
@@ -122,6 +129,13 @@ struct NotebookGridView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                withAnimation { isSearchVisible.toggle() }
+                if !isSearchVisible { searchText = "" }
+            } label: {
+                Label("검색", systemImage: "magnifyingglass")
+            }
+            .keyboardShortcut("f", modifiers: .command)
             Button { showImporter = true } label: { Label("가져오기", systemImage: "square.and.arrow.down") }
             Button { showNewFolder = true } label: { Label("새 폴더", systemImage: "folder.badge.plus") }
             Button { showNewNotebook = true } label: { Label("새 노트", systemImage: "plus") }
