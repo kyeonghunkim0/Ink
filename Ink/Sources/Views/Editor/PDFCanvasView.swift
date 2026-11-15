@@ -340,50 +340,70 @@ final class ResponderPDFView: PDFView {
         didSet { if isFingerDrawingEnabled != oldValue { tuneScrollViews() } }
     }
 
-    /// 마지막 페이지에서 다음 페이지 방향으로 넘기려 했을 때 호출된다.
+    /// 마지막 페이지에서 다음 페이지 방향으로 충분히 끌었다 놓았을 때 호출된다.
     var onSwipePastLastPage: (() -> Void)?
     private var observedPans: Set<ObjectIdentifier> = []
     private var panStartedOnLastPage = false
+    /// 이만큼 왼쪽으로 끌면 "놓으면 추가" 상태가 된다.
+    private let addPageThreshold: CGFloat = 90
+    private var isAddPageArmed = false
+    private let addPageHint = AddPageHintView()
 
-    /// 페이지가 한 장뿐이면 페이지 뷰 컨트롤러의 스크롤 뷰가 팬을 받지 않으므로, 뷰 자체에서 왼쪽 스와이프를 감지한다.
-    private lazy var singlePageSwipe: UISwipeGestureRecognizer = {
-        let swipe = UISwipeGestureRecognizer(target: self, action: #selector(handleSinglePageSwipe))
-        swipe.direction = .left
-        swipe.allowedTouchTypes = [UITouch.TouchType.direct.rawValue as NSNumber]
-        swipe.cancelsTouchesInView = false
-        swipe.delaysTouchesEnded = false
-        return swipe
+    /// 페이지가 한 장뿐이면 페이지 뷰 컨트롤러의 스크롤 뷰가 팬을 받지 않으므로, 뷰 자체에서 끌기를 감지한다.
+    private lazy var singlePagePan: UIPanGestureRecognizer = {
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handleSinglePagePan))
+        pan.allowedTouchTypes = [UITouch.TouchType.direct.rawValue as NSNumber]
+        pan.cancelsTouchesInView = false
+        pan.delaysTouchesEnded = false
+        pan.delegate = singlePagePanDelegate
+        return pan
     }()
+    private let singlePagePanDelegate = SimultaneousGestureDelegate()
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window != nil {
             onDidMoveToWindow?()
-            if singlePageSwipe.view == nil { addGestureRecognizer(singlePageSwipe) }
+            if singlePagePan.view == nil { addGestureRecognizer(singlePagePan) }
+            if addPageHint.superview == nil { addSubview(addPageHint) }
         }
     }
 
-    @objc private func handleSinglePageSwipe() {
-        guard displayDirection == .horizontal, document?.pageCount == 1 else { return }
-        onSwipePastLastPage?()
+    @objc private func handleSinglePagePan(_ pan: UIPanGestureRecognizer) {
+        guard document?.pageCount == 1 else { return }
+        trackAddPagePan(pan)
     }
 
     @objc private func handlePagePan(_ pan: UIPanGestureRecognizer) {
+        guard (document?.pageCount ?? 0) > 1 else { return }
+        trackAddPagePan(pan)
+    }
+
+    /// 마지막 페이지에서 왼쪽으로 끄는 동안 안내를 보여 주고, 임계치를 넘긴 채 놓으면 페이지를 추가한다.
+    private func trackAddPagePan(_ pan: UIPanGestureRecognizer) {
         switch pan.state {
         case .began:
-            panStartedOnLastPage = isOnLastPage
+            panStartedOnLastPage = isOnLastPage && displayDirection == .horizontal
+            isAddPageArmed = false
+        case .changed:
+            guard panStartedOnLastPage else { return }
+            let pulled = -pan.translation(in: self).x
+            let progress = max(0, min(1, pulled / addPageThreshold))
+            isAddPageArmed = pulled >= addPageThreshold
+            addPageHint.update(progress: progress, armed: isAddPageArmed)
         case .ended:
-            guard panStartedOnLastPage, displayDirection == .horizontal else { return }
-            let translation = pan.translation(in: self).x
-            let velocity = pan.velocity(in: self).x
-            // 왼쪽으로 충분히 끌었고 되돌리는 중이 아니면 다음 페이지를 요청한 것으로 본다.
-            if translation < -60, velocity <= 0 {
+            let shouldAdd = panStartedOnLastPage && isAddPageArmed
+            addPageHint.hide()
+            if shouldAdd {
                 // 되돌아가는 바운스 애니메이션이 끝난 뒤에 추가해야 페이지 뷰 컨트롤러가 중간에 멈추지 않는다.
                 whenSettled(pan.view as? UIScrollView) { [weak self] in self?.onSwipePastLastPage?() }
             }
             panStartedOnLastPage = false
+            isAddPageArmed = false
         case .cancelled, .failed:
+            addPageHint.hide()
             panStartedOnLastPage = false
+            isAddPageArmed = false
         default:
             break
         }
@@ -411,6 +431,10 @@ final class ResponderPDFView: PDFView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        let hintSize = addPageHint.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+        addPageHint.bounds = CGRect(origin: .zero, size: hintSize)
+        addPageHint.center = CGPoint(x: bounds.maxX - hintSize.width / 2 - 20, y: bounds.midY)
+        bringSubviewToFront(addPageHint)
         if fitsOnNextLayout, bounds.width > 0, document != nil {
             fitsOnNextLayout = false
             let fit = scaleFactorForSizeToFit
@@ -430,7 +454,7 @@ final class ResponderPDFView: PDFView {
                 let direct = [UITouch.TouchType.direct.rawValue as NSNumber]
                 scrollView.panGestureRecognizer.allowedTouchTypes = direct
                 scrollView.panGestureRecognizer.minimumNumberOfTouches = isFingerDrawingEnabled ? 2 : 1
-                singlePageSwipe.numberOfTouchesRequired = isFingerDrawingEnabled ? 2 : 1
+                singlePagePan.minimumNumberOfTouches = isFingerDrawingEnabled ? 2 : 1
                 scrollView.pinchGestureRecognizer?.allowedTouchTypes = direct
                 let id = ObjectIdentifier(scrollView.panGestureRecognizer)
                 if !observedPans.contains(id) {
@@ -440,6 +464,69 @@ final class ResponderPDFView: PDFView {
             }
             if view is PKCanvasView { continue }
             queue.append(contentsOf: view.subviews)
+        }
+    }
+}
+
+/// 단일 페이지용 팬이 PDFView·캔버스 제스처와 함께 인식되게 하는 델리게이트.
+private final class SimultaneousGestureDelegate: NSObject, UIGestureRecognizerDelegate {
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+}
+
+/// 마지막 페이지에서 왼쪽으로 끌 때 "놓으면 새 페이지 추가" 안내. 끈 거리만큼 나타나고 임계치를 넘으면 강조된다.
+@MainActor
+final class AddPageHintView: UIVisualEffectView {
+    private let icon = UIImageView()
+    private let label = UILabel()
+
+    init() {
+        super.init(effect: UIBlurEffect(style: .systemThinMaterial))
+        layer.cornerRadius = 22
+        clipsToBounds = true
+        isUserInteractionEnabled = false
+        alpha = 0
+        accessibilityIdentifier = "editor.addPageHint"
+
+        icon.contentMode = .scaleAspectFit
+        icon.tintColor = .label
+        label.font = .preferredFont(forTextStyle: .subheadline)
+        label.textColor = .label
+        let stack = UIStackView(arrangedSubviews: [icon, label])
+        stack.axis = .horizontal
+        stack.spacing = 8
+        stack.alignment = .center
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 14),
+            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 11),
+            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -11),
+            icon.widthAnchor.constraint(equalToConstant: 22),
+            icon.heightAnchor.constraint(equalToConstant: 22),
+        ])
+        update(progress: 0, armed: false)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    /// `progress`는 0...1(끈 거리 / 임계치). `armed`면 놓았을 때 페이지가 추가된다.
+    func update(progress: CGFloat, armed: Bool) {
+        layer.removeAllAnimations()
+        isHidden = false
+        alpha = min(1, progress * 1.4)
+        let scale = 0.85 + 0.15 * progress
+        transform = CGAffineTransform(scaleX: scale, y: scale)
+        icon.image = UIImage(systemName: armed ? "plus.circle.fill" : "plus.circle")
+        icon.tintColor = armed ? .tintColor : .label
+        label.text = armed ? "놓으면 새 페이지 추가" : "더 끌어서 새 페이지 추가"
+        if let superview { superview.setNeedsLayout() }
+    }
+
+    func hide() {
+        UIView.animate(withDuration: 0.2) { self.alpha = 0 } completion: { _ in
+            if self.alpha == 0 { self.isHidden = true }
         }
     }
 }
