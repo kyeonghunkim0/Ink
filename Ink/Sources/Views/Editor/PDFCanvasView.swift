@@ -60,6 +60,9 @@ struct PDFCanvasView: UIViewRepresentable {
         private var appliedNavigationToken = -1
         private var appliedZoomToken = 0
         private var appliedEditToken = 0
+        /// 직선 보정 후보. 펜을 멈춘 채 뗀 직후의 캔버스.
+        private var pendingStraighten: (canvas: PKCanvasView, at: Date)?
+        private var isStraightening = false
         private var appliedPolicy: PKCanvasViewDrawingPolicy?
         private var appliedFilter: PlaybackFilter?
         private var isApplyingPlayback = false
@@ -200,6 +203,24 @@ struct PDFCanvasView: UIViewRepresentable {
             canvas.perform(selector, with: nil)
         }
 
+        /// 방금 끝난 스트로크가 직선 후보면 직선으로 바꾼다.
+        private func straightenIfNeeded(_ canvas: PKCanvasView) {
+            guard let pending = pendingStraighten, pending.canvas === canvas,
+                  Date().timeIntervalSince(pending.at) < 1.0 else { return }
+            pendingStraighten = nil
+            var drawing = canvas.drawing
+            guard let last = drawing.strokes.last, isInking(canvas.tool),
+                  let line = StrokeStraightener.straightened(last) else { return }
+            drawing.strokes[drawing.strokes.count - 1] = line
+            isStraightening = true
+            canvas.drawing = drawing
+            isStraightening = false
+        }
+
+        private func isInking(_ tool: PKTool) -> Bool {
+            tool is PKInkingTool
+        }
+
         @objc func pageChanged() {
             guard let pdfView, let page = pdfView.currentPage, let doc = pdfView.document else { return }
             let index = doc.index(for: page)
@@ -242,6 +263,12 @@ struct PDFCanvasView: UIViewRepresentable {
             let full = model.drawing(forPageAt: index)
             canvas.drawing = appliedFilter.map { $0.apply(to: full) } ?? full
             canvas.isUserInteractionEnabled = appliedFilter == nil
+            let hold = StrokeHoldObserver(target: nil, action: nil)
+            hold.onTouchEnded = { [weak self, weak canvas] held in
+                guard let self, let canvas else { return }
+                self.pendingStraighten = held >= StrokeStraightener.holdDuration ? (canvas, Date()) : nil
+            }
+            canvas.addGestureRecognizer(hold)
             toolPicker.addObserver(canvas)
             toolPicker.setVisible(true, forFirstResponder: canvas)
             if #available(iOS 26, *) {
@@ -288,9 +315,10 @@ struct PDFCanvasView: UIViewRepresentable {
         // MARK: PKCanvasViewDelegate
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
-            guard !isApplyingPlayback,
+            guard !isApplyingPlayback, !isStraightening,
                   let page = pageForCanvas[ObjectIdentifier(canvasView)],
                   let index = pdfView?.document?.index(for: page) else { return }
+            straightenIfNeeded(canvasView)
             model.updateDrawing(canvasView.drawing, forPageAt: index)
         }
     }
