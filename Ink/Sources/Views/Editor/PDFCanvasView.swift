@@ -77,7 +77,7 @@ struct PDFCanvasView: UIViewRepresentable {
                 pdfView.document = nil
                 pdfView.document = document.pdfDocument
                 configureScale(pdfView)
-                if let previousScale, !model.isWhiteboard { pdfView.scaleFactor = previousScale }
+                if let previousScale { pdfView.scaleFactor = previousScale }
                 if let page = document.pdfDocument.page(at: targetIndex) { pdfView.go(to: page) }
                 appliedNavigationToken = model.navigationToken
             }
@@ -143,6 +143,13 @@ struct PDFCanvasView: UIViewRepresentable {
             let fit = pdfView.scaleFactorForSizeToFit
             pdfView.minScaleFactor = max(fit * 0.4, 0.05)
             pdfView.maxScaleFactor = max(fit * 6, 4)
+            if model.isWhiteboard {
+                // 화이트보드는 처음에 보드 전체가 보이도록 맞춤 배율로 연다.
+                // 뷰 크기가 아직 정해지기 전이면 맞춤 배율이 틀리므로 레이아웃 뒤에 다시 맞춘다.
+                pdfView.autoScales = false
+                pdfView.scaleFactor = fit
+                (pdfView as? ResponderPDFView)?.fitsOnNextLayout = true
+            }
         }
 
         private func applyPlayback(_ filter: PlaybackFilter?) {
@@ -261,8 +268,23 @@ struct PDFCanvasView: UIViewRepresentable {
 /// 윈도우에 붙는 시점을 알려주는 PDFView. 첫 응답자는 페이지 캔버스가 맡는다.
 final class ResponderPDFView: PDFView {
     var onDidMoveToWindow: (() -> Void)?
+
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window != nil { onDidMoveToWindow?() }
+    }
+
+    /// 다음 레이아웃에서 문서 전체가 보이도록 배율을 맞춘다(화이트보드 초기 열기).
+    var fitsOnNextLayout = false
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if fitsOnNextLayout, bounds.width > 0, document != nil {
+            fitsOnNextLayout = false
+            let fit = scaleFactorForSizeToFit
+            minScaleFactor = max(fit * 0.4, 0.05)
+            maxScaleFactor = max(fit * 6, 4)
+            scaleFactor = fit
+        }
     }
 }

@@ -97,6 +97,10 @@ struct NotebookGridView: View {
     private func openDebugSampleIfRequested() async {
         #if DEBUG
         guard folder == store.rootURL else { return }
+        if CommandLine.arguments.contains("--screenshot-demo") {
+            await DemoContent.install(store: store, in: folder)
+            return
+        }
         // `--import <경로>`: 호스트 파일을 바로 가져와 연다(시뮬레이터는 Mac 파일 시스템을 읽을 수 있다).
         if let i = CommandLine.arguments.firstIndex(of: "--import"), CommandLine.arguments.indices.contains(i + 1) {
             for item in store.items(in: folder) where item.name.hasPrefix("sample") { try? store.delete(item) }
