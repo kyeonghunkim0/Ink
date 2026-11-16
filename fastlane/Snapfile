@@ -3,7 +3,7 @@ devices([
   "iPad Pro 13-inch (M5)",
   "iPad Pro 11-inch (M5)"
 ])
-languages(["ko-KR"])
+languages(["ko"])
 workspace("./Ink.xcworkspace")
 scheme("Ink")
 only_testing(["InkUITests/ScreenshotUITests"])
