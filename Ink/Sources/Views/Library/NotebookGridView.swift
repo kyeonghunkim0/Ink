@@ -8,6 +8,8 @@ struct NotebookGridView: View {
     @Environment(DocumentStore.self) private var store
     @Environment(Router.self) private var router
     @State private var items: [LibraryItem] = []
+    /// 첫 목록 읽기가 끝났는지. 끝나기 전에는 빈 상태 문구 대신 로딩 표시를 보여준다.
+    @State private var hasLoaded = false
     @State private var searchText = ""
     @State private var isSearchVisible = false
     @State private var filteredItems: [LibraryItem] = []
@@ -18,13 +20,13 @@ struct NotebookGridView: View {
     @State private var isImporting = false
     @State private var renamingItem: LibraryItem?
     @State private var renameText = ""
-    @State private var movingItem: LibraryItem?
+    /// 이동 시트 요청. 컨텍스트 메뉴(한 개)와 선택 모드(여러 개)가 같은 시트를 쓴다.
+    @State private var moveRequest: MoveRequest?
     @State private var errorMessage: String?
     /// 선택 모드. 셀을 탭하면 열지 않고 선택한다.
     @State private var isSelecting = false
     @State private var selection: Set<URL> = []
     @State private var showDeleteConfirmation = false
-    @State private var isMovingSelection = false
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 20)]
 
@@ -38,7 +40,10 @@ struct NotebookGridView: View {
                 }
                 .padding(.top, 12)
             }
-            if shown.isEmpty {
+            if !hasLoaded {
+                ProgressView("불러오는 중…")
+                    .padding(.top, 80)
+            } else if shown.isEmpty {
                 ContentUnavailableView(
                     "노트가 없습니다", systemImage: "note.text",
                     description: Text("오른쪽 위 + 버튼으로 새 노트를 만들거나 PDF, Word, PowerPoint, Excel 파일을 가져오세요."))
@@ -73,21 +78,16 @@ struct NotebookGridView: View {
                 Task { await create(options) }
             }
         }
-        .sheet(item: $movingItem) { item in
-            MoveItemsSheet(items: [item]) { target in
-                attempt { try store.move(item, to: target) }
-            }
-        }
-        .sheet(isPresented: $isMovingSelection) {
-            MoveItemsSheet(items: selectedItems) { target in
-                moveSelected(to: target)
+        .sheet(item: $moveRequest) { request in
+            MoveItemsSheet(items: request.items) { target in
+                Task { await move(request.items, to: target) }
             }
         }
         .confirmationDialog(
             "선택한 \(selection.count)개 항목을 삭제할까요?",
             isPresented: $showDeleteConfirmation, titleVisibility: .visible
         ) {
-            Button("삭제", role: .destructive) { deleteSelected() }
+            Button("삭제", role: .destructive) { Task { await deleteSelected() } }
         } message: {
             Text("폴더를 삭제하면 안의 노트도 함께 삭제됩니다.")
         }
@@ -102,7 +102,7 @@ struct NotebookGridView: View {
         .alert("이름 변경", isPresented: Binding(get: { renamingItem != nil }, set: { if !$0 { renamingItem = nil } })) {
             TextField("이름", text: $renameText)
             Button("변경") {
-                if let item = renamingItem { attempt { try store.rename(item, to: renameText) } }
+                if let item = renamingItem { Task { await rename(item, to: renameText) } }
                 renamingItem = nil
             }
             Button("취소", role: .cancel) { renamingItem = nil }
@@ -120,6 +120,7 @@ struct NotebookGridView: View {
         }
         .task(id: store.changeCounter) {
             items = store.items(in: folder)
+            hasLoaded = true
             // 밖에서 지워지거나 이동한 항목은 선택에서 뺀다.
             selection.formIntersection(items.map(\.url))
         }
@@ -185,18 +186,19 @@ struct NotebookGridView: View {
 
     /// 선택 모드 하단 바: 이동·삭제.
     private var selectionBar: some View {
-        HStack(spacing: 28) {
-            Button { isMovingSelection = true } label: { Label("이동", systemImage: "folder") }
-            Button(role: .destructive) { showDeleteConfirmation = true } label: { Label("삭제", systemImage: "trash") }
-                .tint(.red)
+        // 캡슐 글래스를 HStack 전체에 씌우면 iOS 26에서 안쪽 버튼이 탭을 받지 못하므로 버튼마다 글래스 스타일을 준다.
+        AdaptiveGlassContainer(spacing: 16) {
+            HStack(spacing: 16) {
+                Button { moveRequest = MoveRequest(items: selectedItems) } label: { Label("이동", systemImage: "folder") }
+                    .adaptiveGlassButtonStyle()
+                Button(role: .destructive) { showDeleteConfirmation = true } label: { Label("삭제", systemImage: "trash") }
+                    .adaptiveGlassButtonStyle()
+                    .tint(.red)
+            }
+            .disabled(selection.isEmpty)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
         }
-        .buttonStyle(.plain)
-        .font(.body.weight(.medium))
-        .foregroundStyle(selection.isEmpty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.tint))
-        .disabled(selection.isEmpty)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
-        .adaptiveGlassCapsule()
         .frame(maxWidth: .infinity)
         .padding(.bottom, 8)
         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -220,37 +222,55 @@ struct NotebookGridView: View {
         selection.removeAll()
     }
 
-    private func deleteSelected() {
+    private func deleteSelected() async {
+        let targets = selectedItems
+        endSelecting()
         var failed: [String] = []
-        for item in selectedItems {
-            do { try delete(item) } catch { failed.append(item.name) }
+        for item in targets {
+            do { try await delete(item) } catch { failed.append(item.name) }
         }
         if !failed.isEmpty { errorMessage = "삭제하지 못했습니다: \(failed.joined(separator: ", "))" }
-        endSelecting()
     }
 
-    private func moveSelected(to target: URL) {
+    private func move(_ targets: [LibraryItem], to folder: URL) async {
+        if isSelecting { endSelecting() }
         var failed: [String] = []
-        for item in selectedItems {
-            do { try store.move(item, to: target) } catch { failed.append(item.name) }
+        for item in targets {
+            await closeOpenTabs(in: item)
+            do { try store.move(item, to: folder) } catch { failed.append(item.name) }
         }
         if !failed.isEmpty { errorMessage = "이동하지 못했습니다: \(failed.joined(separator: ", "))" }
-        endSelecting()
     }
 
-    /// 항목을 지우고, 열려 있던 탭도 닫는다.
-    private func delete(_ item: LibraryItem) throws {
+    private func rename(_ item: LibraryItem, to name: String) async {
+        await closeOpenTabs(in: item)
+        attempt { try store.rename(item, to: name) }
+    }
+
+    /// 항목(또는 폴더 안)의 열린 탭을 닫고 문서 해제를 기다린다.
+    /// 열린 UIDocument가 남아 있으면 파일 코디네이터 이동·삭제가 메인 스레드에서 교착된다.
+    private func closeOpenTabs(in item: LibraryItem) async {
+        switch item.kind {
+        case .notebook: await router.closeTabAndWait(item.url)
+        case .folder: await router.closeTabsAndWait(under: item.url)
+        }
+    }
+
+    /// 열려 있던 탭을 먼저 닫은 뒤 항목을 지운다.
+    private func delete(_ item: LibraryItem) async throws {
+        await closeOpenTabs(in: item)
         try store.delete(item)
-        if item.kind == .notebook { router.closeTab(item.url) }
     }
 
     @ViewBuilder
     private func contextMenu(for item: LibraryItem) -> some View {
         Button { renameText = item.name; renamingItem = item } label: { Label("이름 변경", systemImage: "pencil") }
         Button { attempt { try store.duplicate(item) } } label: { Label("복제", systemImage: "plus.square.on.square") }
-        Button { movingItem = item } label: { Label("이동", systemImage: "folder") }
+        Button { moveRequest = MoveRequest(items: [item]) } label: { Label("이동", systemImage: "folder") }
         Divider()
-        Button(role: .destructive) { attempt { try delete(item) } } label: { Label("삭제", systemImage: "trash") }
+        Button(role: .destructive) {
+            Task { do { try await delete(item) } catch { errorMessage = error.localizedDescription } }
+        } label: { Label("삭제", systemImage: "trash") }
     }
 
     /// 제목과 매니페스트의 인식 텍스트로 노트를 거른다. 폴더는 이름으로만 거른다.
@@ -387,6 +407,12 @@ struct LibraryItemCell: View {
             return UIImage(data: data)
         }.value
     }
+}
+
+/// 이동 시트 요청. `sheet(item:)`용 식별자.
+struct MoveRequest: Identifiable {
+    let id = UUID()
+    let items: [LibraryItem]
 }
 
 /// 이동 대상 폴더 선택. 선택한 항목 자신(과 그 안), 현재 폴더는 고를 수 없다.
