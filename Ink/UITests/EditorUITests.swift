@@ -102,7 +102,7 @@ final class WhiteboardAndRecordingUITests: XCTestCase {
             recorded = false
         }
         if recorded {
-            app.buttons["녹음 목록"].firstMatch.tap()
+            app.buttons["녹음"].firstMatch.press(forDuration: 1)
             let item = app.buttons.matching(NSPredicate(format: "label BEGINSWITH '녹음 1'")).firstMatch
             XCTAssertTrue(item.waitForExistence(timeout: 5))
             item.tap()

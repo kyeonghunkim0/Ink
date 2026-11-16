@@ -12,9 +12,8 @@ final class ObjectsUITests: XCTestCase {
         let textBox = app.buttons["텍스트 상자"].firstMatch
         XCTAssertTrue(textBox.waitForExistence(timeout: 5))
         textBox.tap()
-        // 삽입 후 객체 모드가 켜진다.
+        // 삽입 후 객체 모드가 켜지고 텍스트 편집이 시작된다.
         let objectMode = app.buttons["객체 선택"].firstMatch
-        XCTAssertTrue(objectMode.waitForExistence(timeout: 5))
         XCTAssertTrue(app.textViews.firstMatch.waitForExistence(timeout: 5))
 
         app.buttons["삽입"].firstMatch.tap()
@@ -29,6 +28,8 @@ final class ObjectsUITests: XCTestCase {
         shot.name = "objects-inserted"; shot.lifetime = .keepAlways; add(shot)
 
         // 객체 모드를 끄면 필기 캔버스가 다시 활성화된다.
+        app.buttons["삽입"].firstMatch.tap()
+        XCTAssertTrue(objectMode.waitForExistence(timeout: 5))
         objectMode.tap()
         sleep(1)
     }

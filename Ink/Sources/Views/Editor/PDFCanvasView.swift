@@ -71,6 +71,34 @@ struct PDFCanvasView: UIViewRepresentable {
         init(model: EditorModel) {
             self.model = model
             super.init()
+            toolPicker.accessoryItem = makeInsertItem()
+        }
+
+        /// 도구 피커 끝에 붙는 삽입 메뉴(사진·텍스트 상자·스티커)와 객체 선택 토글.
+        private func makeInsertItem() -> UIBarButtonItem {
+            let insert = UIMenu(options: .displayInline, children: [
+                UIAction(title: "사진", image: UIImage(systemName: "photo")) { [weak model] _ in
+                    model?.isPhotoPickerPresented = true
+                },
+                UIAction(title: "텍스트 상자", image: UIImage(systemName: "textbox")) { [weak model] _ in
+                    model?.addTextBox()
+                },
+                UIAction(title: "스티커", image: UIImage(systemName: "face.smiling")) { [weak model] _ in
+                    model?.isStickerSheetPresented = true
+                },
+            ])
+            // 열 때마다 현재 상태를 반영하도록 지연 생성.
+            let objectMode = UIDeferredMenuElement.uncached { [weak model] completion in
+                let action = UIAction(title: "객체 선택", image: UIImage(systemName: "square.dashed"),
+                                      state: model?.isObjectModeEnabled == true ? .on : .off) { [weak model] _ in
+                    model?.isObjectModeEnabled.toggle()
+                }
+                completion([action])
+            }
+            let menu = UIMenu(children: [insert, objectMode])
+            let item = UIBarButtonItem(image: UIImage(systemName: "plus.square.on.square"), menu: menu)
+            item.accessibilityLabel = "삽입"
+            return item
         }
 
         // MARK: Apply model state

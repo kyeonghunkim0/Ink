@@ -95,7 +95,6 @@ struct EditorContent: View {
     @State private var shareItem: ShareItem?
     @State private var isExporting = false
     @State private var photoItem: PhotosPickerItem?
-    @State private var showStickerSheet = false
     @State private var isSearchVisible = false
     @State private var showClearConfirm = false
 
@@ -143,9 +142,10 @@ struct EditorContent: View {
         .sheet(item: $shareItem) { item in
             ShareSheet(items: [item.url], airDropOnly: item.airDropOnly)
         }
-        .sheet(isPresented: $showStickerSheet) {
+        .sheet(isPresented: $model.isStickerSheetPresented) {
             StickerSheet { emoji in model.addSticker(emoji) }
         }
+        .photosPicker(isPresented: $model.isPhotoPickerPresented, selection: $photoItem, matching: .images)
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
             Task {
@@ -182,7 +182,7 @@ struct EditorContent: View {
                         }
                     }
                 } label: {
-                    Label("페이지 추가", systemImage: "plus.rectangle.portrait")
+                    Label("페이지 추가", systemImage: "plus")
                 } primaryAction: {
                     model.addPage()
                 }
@@ -194,26 +194,8 @@ struct EditorContent: View {
                 .keyboardShortcut("t", modifiers: .command)
             }
 
-            Menu {
-                PhotosPicker(selection: $photoItem, matching: .images) {
-                    Label("사진", systemImage: "photo")
-                }
-                Button { model.addTextBox() } label: { Label("텍스트 상자", systemImage: "textbox") }
-                Button { showStickerSheet = true } label: { Label("스티커", systemImage: "face.smiling") }
-            } label: {
-                Label("삽입", systemImage: "plus.square.on.square")
-            }
-
             Button(role: .destructive) { showClearConfirm = true } label: {
-                Label("페이지 전체 지우기", systemImage: "trash")
-            }
-
-            Toggle(isOn: $model.isObjectModeEnabled) {
-                Label("객체 선택", systemImage: "arrow.up.left.and.down.right.magnifyingglass")
-            }
-
-            Toggle(isOn: $model.isFingerDrawingEnabled) {
-                Label("손가락 필기", systemImage: "hand.draw")
+                Label("페이지 전체 지우기", systemImage: "eraser.line.dashed")
             }
 
             Button {
@@ -224,14 +206,7 @@ struct EditorContent: View {
             }
             .keyboardShortcut("f", modifiers: .command)
 
-            Button {
-                Task { await model.toggleRecording() }
-            } label: {
-                Label("녹음", systemImage: model.recorder.isRecording ? "stop.circle.fill" : "mic")
-            }
-            .tint(model.recorder.isRecording ? .red : nil)
-            .keyboardShortcut("r", modifiers: .command)
-
+            // 탭: 녹음 시작/중지. 길게 누르기: 저장된 녹음 재생.
             Menu {
                 Section("녹음") {
                     if model.manifest.recordings.isEmpty {
@@ -244,8 +219,12 @@ struct EditorContent: View {
                     }
                 }
             } label: {
-                Label("녹음 목록", systemImage: "waveform")
+                Label("녹음", systemImage: model.recorder.isRecording ? "stop.circle.fill" : "mic")
+            } primaryAction: {
+                Task { await model.toggleRecording() }
             }
+            .tint(model.recorder.isRecording ? .red : nil)
+            .keyboardShortcut("r", modifiers: .command)
 
             Menu {
                 Button { export(.pdfAll) } label: { Label("PDF로 내보내기 (전체)", systemImage: "doc.richtext") }

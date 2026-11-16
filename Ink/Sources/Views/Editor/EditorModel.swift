@@ -43,6 +43,9 @@ final class EditorModel {
         didSet { if !isObjectModeEnabled { selectedObjectID = nil } }
     }
     var selectedObjectID: UUID?
+    /// 도구 피커의 삽입 메뉴에서 띄우는 사진 선택기/스티커 시트.
+    var isPhotoPickerPresented = false
+    var isStickerSheetPresented = false
     /// 객체 목록이 바뀔 때 증가. 오버레이가 이 값으로 동기화한다.
     private(set) var objectsVersion = 0
     var errorMessage: String?
