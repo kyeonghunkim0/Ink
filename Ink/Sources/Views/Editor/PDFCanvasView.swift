@@ -427,7 +427,9 @@ final class ResponderPDFView: PDFView {
         while let view = queue.popLast() {
             if let scrollView = view as? UIScrollView {
                 scrollView.delaysContentTouches = false
-                scrollView.canCancelContentTouches = false
+                // false로 두면 터치가 캔버스에 먼저 전달된 뒤 스크롤 뷰가 가져오지 못해 페이지 넘김이 멈춘다.
+                // 팬은 손가락 전용이라 펜 스트로크는 어차피 취소되지 않는다.
+                scrollView.canCancelContentTouches = true
                 let direct = [UITouch.TouchType.direct.rawValue as NSNumber]
                 scrollView.panGestureRecognizer.allowedTouchTypes = direct
                 scrollView.panGestureRecognizer.minimumNumberOfTouches = isFingerDrawingEnabled ? 2 : 1
