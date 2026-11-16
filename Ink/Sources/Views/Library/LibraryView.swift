@@ -15,7 +15,8 @@ struct LibraryView: View {
             NavigationStack(path: $router.path) {
                 Group {
                     if let root = selectedFolder ?? store.rootURL {
-                        NotebookGridView(folder: root)
+                        // 사이드바에서 폴더를 바꾸면 뷰를 새로 만들어 목록·선택·검색 상태를 초기화한다.
+                        NotebookGridView(folder: root).id(root)
                     } else {
                         ProgressView("저장소 준비 중…")
                     }

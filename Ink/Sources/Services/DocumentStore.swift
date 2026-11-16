@@ -250,7 +250,7 @@ final class DocumentStore {
 
     func rename(_ item: LibraryItem, to newName: String) throws {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, trimmed != item.name else { return }
         let folder = item.url.deletingLastPathComponent()
         let ext: String? = item.kind == .notebook ? NotebookPackage.fileExtension : nil
         let target = uniqueURL(in: folder, baseName: trimmed, pathExtension: ext)
@@ -269,6 +269,7 @@ final class DocumentStore {
         }
         if let coordinatorError { throw coordinatorError }
         if let inner { throw inner }
+        forgetUbiquitousItems(under: item.url)
         changeCounter += 1
     }
 
@@ -338,6 +339,16 @@ final class DocumentStore {
         }
         if let coordinatorError { throw coordinatorError }
         if let inner { throw inner }
+        forgetUbiquitousItems(under: from)
+    }
+
+    /// 우리가 직접 옮기거나 지운 경로를 메타데이터 스냅샷에서 바로 뺀다.
+    /// 쿼리 갱신(0.5초 배칭)이 오기 전까지 옛 경로가 "내려받는 중" 항목으로 그려져 노트가 두 개로 보이는 것을 막는다.
+    private func forgetUbiquitousItems(under url: URL) {
+        let path = url.standardizedFileURL.path
+        knownUbiquitousItems = knownUbiquitousItems.filter { key, _ in
+            key != path && !key.hasPrefix(path + "/")
+        }
     }
 
     private func startMetadataQuery() {

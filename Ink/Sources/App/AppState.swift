@@ -20,6 +20,8 @@ final class Router {
     var isEditorPresented = false
     /// 탭별 편집 모델. 탭을 전환해도 문서를 닫지 않는다.
     @ObservationIgnored private var sessions: [URL: EditorModel] = [:]
+    /// 닫는 중인 문서. 파일 작업 전에 해제 완료를 기다릴 수 있게 한다.
+    @ObservationIgnored private var closingTasks: [URL: Task<Void, Never>] = [:]
 
     func navigate(to destination: Destination) {
         path.append(destination)
@@ -47,12 +49,32 @@ final class Router {
         guard let index = openNotebooks.firstIndex(of: url) else { return }
         openNotebooks.remove(at: index)
         if let model = sessions.removeValue(forKey: url) {
-            Task { await model.close() }
+            closingTasks[url] = Task {
+                await model.close()
+                closingTasks[url] = nil
+            }
         }
         if activeNotebook == url {
             activeNotebook = openNotebooks.indices.contains(index) ? openNotebooks[index] : openNotebooks.last
         }
         if openNotebooks.isEmpty { isEditorPresented = false }
+    }
+
+    /// 탭을 닫고 문서 해제가 끝날 때까지 기다린다.
+    /// 파일을 옮기거나 이름을 바꾸거나 지우기 전에 반드시 호출한다. 열린 UIDocument가 파일 프리젠터로 남아 있으면
+    /// 메인 스레드의 NSFileCoordinator가 그 문서의 응답을 기다리며 교착된다.
+    func closeTabAndWait(_ url: URL) async {
+        let url = url.normalizedFileURL
+        closeTab(url)
+        await closingTasks[url]?.value
+    }
+
+    /// `folder` 안에 열린 모든 탭을 닫고 해제를 기다린다. 폴더를 옮기거나 이름을 바꾸거나 지우기 전에 쓴다.
+    func closeTabsAndWait(under folder: URL) async {
+        let prefix = folder.normalizedFileURL.path + "/"
+        for url in openNotebooks where url.path.hasPrefix(prefix) {
+            await closeTabAndWait(url)
+        }
     }
 
     /// 열려 있는 모든 탭의 문서를 저장한다.
