@@ -1,12 +1,12 @@
 import Foundation
 import PDFKit
 
-enum ImportError: LocalizedError {
+public enum ImportError: LocalizedError {
     case unreadable
     case unsupportedType
     case conversionFailed(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .unreadable: "파일을 읽을 수 없습니다."
         case .unsupportedType: "지원하지 않는 파일 형식입니다."
@@ -16,8 +16,8 @@ enum ImportError: LocalizedError {
 }
 
 /// PDF 데이터를 노트북 매니페스트 + PDFDocument로 변환한다.
-enum PDFImporter {
-    static func makeNotebook(title: String, pdfData: Data) throws -> (NotebookManifest, PDFDocument) {
+public enum PDFImporter {
+    public static func makeNotebook(title: String, pdfData: Data) throws -> (NotebookManifest, PDFDocument) {
         guard let pdf = PDFDocument(data: pdfData), pdf.pageCount > 0 else {
             throw ImportError.unreadable
         }
@@ -31,7 +31,7 @@ enum PDFImporter {
     }
 
     /// 보안 범위 URL에서 데이터를 읽는다. 문서 선택기 결과에 사용한다.
-    static func readData(from url: URL) throws -> Data {
+    public static func readData(from url: URL) throws -> Data {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         var coordinatorError: NSError?

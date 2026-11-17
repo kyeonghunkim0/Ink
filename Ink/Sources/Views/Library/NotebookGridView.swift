@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import InkCore
 
 /// 한 폴더의 노트북/하위 폴더 그리드.
 struct NotebookGridView: View {
@@ -444,5 +445,5 @@ struct MoveItemsSheet: View {
         NotebookGridView(folder: FileManager.default.temporaryDirectory)
     }
     .environment(DocumentStore())
-    .environment(Router())
+    .environment(Router(sessions: EditorSessions()))
 }

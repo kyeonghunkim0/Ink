@@ -12,7 +12,15 @@
 - 스펙/로드맵: ~/.claude/plans/ipados-synchronous-teacup.md
 
 ## 아키텍처
-- Models(Codable 매니페스트, UIDocument) / Services(저장소, 변환, 내보내기, 녹음) / Views(SwiftUI)
+- 모듈(tuist 타깃)
+  - `InkCore` 프레임워크 (`Modules/InkCore/Sources`): Models(Codable 매니페스트, UIDocument) / Services(저장소, 변환, 내보내기, 녹음) / Support. SwiftUI 뷰 금지, 앱에서 쓰는 API는 `public`
+  - `Ink` 앱 (`Ink/Sources`): App(진입점·Router·EditorSessions) / Views(SwiftUI) / Debug(데모 데이터)
+  - 테스트: `InkCoreTests`(Core 로직) · `InkTests`(앱 라우팅·세션) · `InkUITests`
+  - 새 파일을 추가하면 `tuist generate` 다시 실행(소스 glob은 생성 시점에 확정)
+  - SwiftUI에도 `LibraryItem`이 있어 앱 모듈은 `App/CoreTypeAliases.swift`의 별칭으로 InkCore 타입을 가리킴
+- 창(씬)마다 `Router`(경로·탭·편집기 표시), 앱 전역 `EditorSessions`(URL당 EditorModel 하나)
+  - 한 노트는 한 창에만 열림: 다른 창에서 열면 탭이 옮겨 감
+  - 파일 이동·이름 변경·삭제 전 `closeTabAndWait`/`closeTabsAndWait`는 모든 창에 적용됨
 - 문서 = `.inknote` 패키지 디렉터리 (manifest.json, background.pdf, pages/*.drawing, audio/*)
 - 필기: PencilKit / PDF: PDFKit / Office→PDF: WKWebView + UIPrintPageRenderer / 동기화: iCloud ubiquity 컨테이너
 

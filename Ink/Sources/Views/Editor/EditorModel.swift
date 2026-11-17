@@ -3,6 +3,7 @@ import Observation
 import PencilKit
 import PDFKit
 import UIKit
+import InkCore
 
 /// 재생 중 스트로크 동기 표시용 필터.
 struct PlaybackFilter: Equatable {

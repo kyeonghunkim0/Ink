@@ -2,6 +2,7 @@
 import UIKit
 import PencilKit
 import PDFKit
+import InkCore
 
 /// 스크린샷용 데모 노트북을 만든다(`--screenshot-demo` 실행 인자).
 @MainActor

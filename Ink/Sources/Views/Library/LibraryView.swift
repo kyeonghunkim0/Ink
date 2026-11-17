@@ -1,4 +1,5 @@
 import SwiftUI
+import InkCore
 
 /// 라이브러리 루트. 사이드바(폴더) + 노트북 그리드.
 struct LibraryView: View {
@@ -83,5 +84,5 @@ struct FolderSidebar: View {
 }
 
 #Preview {
-    LibraryView().environment(DocumentStore()).environment(Router())
+    LibraryView().environment(DocumentStore()).environment(Router(sessions: EditorSessions()))
 }

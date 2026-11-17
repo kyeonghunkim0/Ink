@@ -1,4 +1,5 @@
 import SwiftUI
+import InkCore
 
 /// 새 노트북 옵션 선택.
 struct NewNotebookSheet: View {

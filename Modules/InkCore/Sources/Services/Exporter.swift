@@ -3,8 +3,8 @@ import PDFKit
 import PencilKit
 
 /// 페이지 객체를 CoreGraphics로 그린다(화면·내보내기 공용).
-enum PageObjectRenderer {
-    static func draw(_ object: PageObject, document: NotebookDocument, in cg: CGContext) {
+public enum PageObjectRenderer {
+    public static func draw(_ object: PageObject, document: NotebookDocument, in cg: CGContext) {
         switch object.kind {
         case .image(let name):
             guard let image = document.image(named: name) else { return }
@@ -26,7 +26,7 @@ enum PageObjectRenderer {
         }
     }
 
-    static func drawAll(for pageID: UUID, document: NotebookDocument, in cg: CGContext) {
+    public static func drawAll(for pageID: UUID, document: NotebookDocument, in cg: CGContext) {
         for object in document.manifest.objects where object.pageID == pageID {
             draw(object, document: document, in: cg)
         }
@@ -34,9 +34,9 @@ enum PageObjectRenderer {
 }
 
 /// 배경 PDF와 필기를 합성해 내보낸다.
-enum Exporter {
+public enum Exporter {
     /// PencilKit은 다크 모드에서 검정 잉크를 흰색으로 뒤집어 그리므로, 용지 색에 맞는 테마로 고정해 래스터화한다.
-    static func inkImage(_ drawing: PKDrawing, from rect: CGRect, scale: CGFloat, paperColor: PaperColor) -> UIImage {
+    public static func inkImage(_ drawing: PKDrawing, from rect: CGRect, scale: CGFloat, paperColor: PaperColor) -> UIImage {
         let style: UIUserInterfaceStyle = paperColor == .dark ? .dark : .light
         var image = UIImage()
         UITraitCollection(userInterfaceStyle: style).performAsCurrent {
@@ -45,7 +45,7 @@ enum Exporter {
         return image
     }
     /// 한 페이지를 이미지로 렌더링한다. `scale`은 포인트당 픽셀 수.
-    static func renderPage(document: NotebookDocument, pageIndex: Int, scale: CGFloat) -> UIImage? {
+    public static func renderPage(document: NotebookDocument, pageIndex: Int, scale: CGFloat) -> UIImage? {
         guard let page = document.pdfDocument.page(at: pageIndex),
               document.manifest.pages.indices.contains(pageIndex) else { return nil }
         let bounds = page.bounds(for: .mediaBox)
@@ -70,7 +70,7 @@ enum Exporter {
     }
 
     /// 필기를 뺀 배경(PDF 페이지 + 객체)만 렌더링한다. 썸네일 스트립이 캐시해 두고 필기만 다시 얹는다.
-    static func renderBackground(document: NotebookDocument, pageIndex: Int, maxDimension: CGFloat) -> UIImage? {
+    public static func renderBackground(document: NotebookDocument, pageIndex: Int, maxDimension: CGFloat) -> UIImage? {
         guard let page = document.pdfDocument.page(at: pageIndex),
               document.manifest.pages.indices.contains(pageIndex) else { return nil }
         let bounds = page.bounds(for: .mediaBox)
@@ -92,7 +92,7 @@ enum Exporter {
     }
 
     /// 캐시한 배경 위에 필기를 얹는다. 배경 렌더보다 훨씬 싸서 획마다 호출해도 된다.
-    static func composite(background: UIImage, drawing: PKDrawing, paperColor: PaperColor) -> UIImage {
+    public static func composite(background: UIImage, drawing: PKDrawing, paperColor: PaperColor) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = background.scale
         format.opaque = true
@@ -103,7 +103,7 @@ enum Exporter {
         }
     }
 
-    static func thumbnail(for document: NotebookDocument, pageIndex: Int, maxDimension: CGFloat) -> UIImage? {
+    public static func thumbnail(for document: NotebookDocument, pageIndex: Int, maxDimension: CGFloat) -> UIImage? {
         guard let page = document.pdfDocument.page(at: pageIndex) else { return nil }
         let bounds = page.bounds(for: .mediaBox)
         let scale = maxDimension / max(bounds.width, bounds.height)
@@ -111,7 +111,7 @@ enum Exporter {
     }
 
     /// 필기를 평탄화한 PDF 데이터. `pageIndices`가 nil이면 전체.
-    static func flattenedPDF(document: NotebookDocument, pageIndices: [Int]? = nil) -> Data {
+    public static func flattenedPDF(document: NotebookDocument, pageIndices: [Int]? = nil) -> Data {
         let indices = pageIndices ?? Array(0..<document.pdfDocument.pageCount)
         let data = NSMutableData()
         UIGraphicsBeginPDFContextToData(data, .zero, nil)
@@ -137,7 +137,7 @@ enum Exporter {
     }
 
     /// 공유용 임시 파일을 만든다.
-    static func writeTemporary(data: Data, name: String) throws -> URL {
+    public static func writeTemporary(data: Data, name: String) throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("export", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent(name)

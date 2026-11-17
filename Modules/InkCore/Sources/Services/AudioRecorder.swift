@@ -4,25 +4,27 @@ import Observation
 /// 녹음과 재생을 담당한다. 오디오 세션 설정은 이 클래스에서만 한다.
 @MainActor
 @Observable
-final class AudioRecorder: NSObject, AVAudioPlayerDelegate {
-    private(set) var isRecording = false
-    private(set) var isPlaying = false
-    private(set) var recordingStartedAt: Date?
-    private(set) var recordingElapsed: TimeInterval = 0
-    private(set) var playbackTime: TimeInterval = 0
-    private(set) var playbackDuration: TimeInterval = 0
-    private(set) var playingRecordingID: UUID?
+public final class AudioRecorder: NSObject, AVAudioPlayerDelegate {
+    public private(set) var isRecording = false
+    public private(set) var isPlaying = false
+    public private(set) var recordingStartedAt: Date?
+    public private(set) var recordingElapsed: TimeInterval = 0
+    public private(set) var playbackTime: TimeInterval = 0
+    public private(set) var playbackDuration: TimeInterval = 0
+    public private(set) var playingRecordingID: UUID?
 
     private var recorder: AVAudioRecorder?
     private var player: AVAudioPlayer?
     private var timer: Timer?
     private var recordingURL: URL?
 
-    func requestPermission() async -> Bool {
+    public override init() { super.init() }
+
+    public func requestPermission() async -> Bool {
         await AVAudioApplication.requestRecordPermission()
     }
 
-    func startRecording() throws -> Date {
+    public func startRecording() throws -> Date {
         stopPlayback()
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
@@ -51,7 +53,7 @@ final class AudioRecorder: NSObject, AVAudioPlayerDelegate {
     }
 
     /// 녹음을 끝내고 (임시 URL, 시작 시각, 길이)를 돌려준다. 오디오가 기록되지 않았으면 에러를 던진다.
-    func stopRecording() throws -> (url: URL, startedAt: Date, duration: TimeInterval) {
+    public func stopRecording() throws -> (url: URL, startedAt: Date, duration: TimeInterval) {
         guard let recorder, let url = recordingURL, let start = recordingStartedAt else { throw RecordingError.notRecording }
         let duration = recorder.currentTime
         recorder.stop()
@@ -69,7 +71,7 @@ final class AudioRecorder: NSObject, AVAudioPlayerDelegate {
         return (url, start, duration)
     }
 
-    func play(url: URL, recordingID: UUID) throws {
+    public func play(url: URL, recordingID: UUID) throws {
         stopPlayback()
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playback, mode: .default)
@@ -86,25 +88,25 @@ final class AudioRecorder: NSObject, AVAudioPlayerDelegate {
         startTimer()
     }
 
-    func pausePlayback() {
+    public func pausePlayback() {
         player?.pause()
         isPlaying = false
         stopTimer()
     }
 
-    func resumePlayback() {
+    public func resumePlayback() {
         guard let player else { return }
         player.play()
         isPlaying = true
         startTimer()
     }
 
-    func seek(to time: TimeInterval) {
+    public func seek(to time: TimeInterval) {
         player?.currentTime = max(0, min(time, playbackDuration))
         playbackTime = player?.currentTime ?? 0
     }
 
-    func stopPlayback() {
+    public func stopPlayback() {
         player?.stop()
         player = nil
         isPlaying = false
@@ -131,7 +133,7 @@ final class AudioRecorder: NSObject, AVAudioPlayerDelegate {
         if let player { playbackTime = player.currentTime }
     }
 
-    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+    public nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in
             self.playbackTime = self.playbackDuration
             self.isPlaying = false
@@ -140,10 +142,10 @@ final class AudioRecorder: NSObject, AVAudioPlayerDelegate {
     }
 }
 
-enum RecordingError: LocalizedError {
+public enum RecordingError: LocalizedError {
     case cannotStart, notRecording, empty
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .cannotStart: "녹음을 시작할 수 없습니다. 마이크를 확인해 주세요."
         case .notRecording: "진행 중인 녹음이 없습니다."

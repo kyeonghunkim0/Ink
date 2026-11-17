@@ -3,7 +3,7 @@ import Foundation
 import PDFKit
 import PencilKit
 import UIKit
-@testable import Ink
+@testable import InkCore
 
 struct ExporterTests {
     /// 다크 모드에서도 검정 잉크는 썸네일에 검게 찍혀야 한다(PencilKit은 다크 모드에서 잉크를 흰색으로 뒤집는다).

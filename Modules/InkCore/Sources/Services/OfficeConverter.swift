@@ -4,8 +4,8 @@ import UniformTypeIdentifiers
 
 /// Word/PowerPoint/Excel 파일을 WKWebView로 렌더링한 뒤 UIPrintPageRenderer로 페이지 단위 PDF를 만든다.
 @MainActor
-final class OfficeConverter: NSObject, WKNavigationDelegate {
-    static let supportedTypes: [UTType] = [
+public final class OfficeConverter: NSObject, WKNavigationDelegate {
+    public static let supportedTypes: [UTType] = [
         .pdf,
         UTType("org.openxmlformats.wordprocessingml.document"),
         UTType("org.openxmlformats.presentationml.presentation"),
@@ -16,13 +16,15 @@ final class OfficeConverter: NSObject, WKNavigationDelegate {
         .rtf,
     ].compactMap { $0 }
 
-    static let officeExtensions: Set<String> = ["doc", "docx", "ppt", "pptx", "xls", "xlsx", "rtf"]
+    public static let officeExtensions: Set<String> = ["doc", "docx", "ppt", "pptx", "xls", "xlsx", "rtf"]
 
     private var webView: WKWebView?
     private var continuation: CheckedContinuation<Void, any Error>?
 
+    public override init() { super.init() }
+
     /// 파일을 PDF 데이터로 변환한다. `fileURL`은 앱이 읽을 수 있는 임시 복사본이어야 한다.
-    func convertToPDF(fileURL: URL) async throws -> Data {
+    public func convertToPDF(fileURL: URL) async throws -> Data {
         let ext = fileURL.pathExtension.lowercased()
         let paper = ext == "pptx" || ext == "ppt"
             ? CGSize(width: 960, height: 540)
@@ -74,21 +76,21 @@ final class OfficeConverter: NSObject, WKNavigationDelegate {
             .flatMap(\.windows).first
     }
 
-    nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    public nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         MainActor.assumeIsolated {
             continuation?.resume()
             continuation = nil
         }
     }
 
-    nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
+    public nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
         MainActor.assumeIsolated {
             continuation?.resume(throwing: error)
             continuation = nil
         }
     }
 
-    nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
+    public nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
         MainActor.assumeIsolated {
             continuation?.resume(throwing: error)
             continuation = nil

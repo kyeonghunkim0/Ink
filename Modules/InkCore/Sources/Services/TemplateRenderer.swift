@@ -2,8 +2,8 @@ import UIKit
 import PDFKit
 
 /// 템플릿 페이지를 벡터로 그려 PDF 페이지를 만든다.
-enum TemplateRenderer {
-    static func backgroundColor(for color: PaperColor) -> UIColor {
+public enum TemplateRenderer {
+    public static func backgroundColor(for color: PaperColor) -> UIColor {
         switch color {
         case .white: UIColor(white: 1, alpha: 1)
         case .yellow: UIColor(red: 1.0, green: 0.98, blue: 0.88, alpha: 1)
@@ -11,7 +11,7 @@ enum TemplateRenderer {
         }
     }
 
-    static func lineColor(for color: PaperColor) -> UIColor {
+    public static func lineColor(for color: PaperColor) -> UIColor {
         switch color {
         case .white: UIColor(white: 0.82, alpha: 1)
         case .yellow: UIColor(red: 0.85, green: 0.80, blue: 0.62, alpha: 1)
@@ -20,7 +20,7 @@ enum TemplateRenderer {
     }
 
     /// 템플릿 PDF 페이지. 반환된 페이지는 `PDFDocument.insert(_:at:)`로 추가할 수 있다.
-    static func makePDFPage(template: PaperTemplate, size: CGSize, color: PaperColor) -> PDFPage {
+    public static func makePDFPage(template: PaperTemplate, size: CGSize, color: PaperColor) -> PDFPage {
         let data = makePDFData(template: template, size: size, color: color)
         guard let doc = PDFDocument(data: data), let page = doc.page(at: 0) else {
             let page = PDFPage()
@@ -31,7 +31,7 @@ enum TemplateRenderer {
     }
 
     /// 여러 페이지로 구성된 템플릿 PDF 문서.
-    static func makePDFDocument(template: PaperTemplate, size: CGSize, color: PaperColor, pageCount: Int) -> PDFDocument {
+    public static func makePDFDocument(template: PaperTemplate, size: CGSize, color: PaperColor, pageCount: Int) -> PDFDocument {
         let doc = PDFDocument()
         for i in 0..<max(pageCount, 1) {
             doc.insert(makePDFPage(template: template, size: size, color: color), at: i)
@@ -39,7 +39,7 @@ enum TemplateRenderer {
         return doc
     }
 
-    static func makePDFData(template: PaperTemplate, size: CGSize, color: PaperColor) -> Data {
+    public static func makePDFData(template: PaperTemplate, size: CGSize, color: PaperColor) -> Data {
         let bounds = CGRect(origin: .zero, size: size)
         let renderer = UIGraphicsPDFRenderer(bounds: bounds)
         return renderer.pdfData { ctx in
@@ -48,7 +48,7 @@ enum TemplateRenderer {
         }
     }
 
-    static func draw(template: PaperTemplate, in bounds: CGRect, color: PaperColor, context cg: CGContext) {
+    public static func draw(template: PaperTemplate, in bounds: CGRect, color: PaperColor, context cg: CGContext) {
         cg.setFillColor(backgroundColor(for: color).cgColor)
         cg.fill(bounds)
         cg.setStrokeColor(lineColor(for: color).cgColor)
@@ -117,7 +117,7 @@ enum TemplateRenderer {
     }
 
     /// 라이브러리 미리보기용 작은 이미지.
-    static func previewImage(template: PaperTemplate, color: PaperColor, size: CGSize = CGSize(width: 90, height: 120)) -> UIImage {
+    public static func previewImage(template: PaperTemplate, color: PaperColor, size: CGSize = CGSize(width: 90, height: 120)) -> UIImage {
         UIGraphicsImageRenderer(size: size).image { ctx in
             let scale = size.width / 300
             ctx.cgContext.scaleBy(x: scale, y: scale)

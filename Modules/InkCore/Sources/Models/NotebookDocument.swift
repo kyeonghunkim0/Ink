@@ -5,10 +5,10 @@ import UniformTypeIdentifiers
 
 /// `.inknote` 패키지 문서. UIKit이 `load(fromContents:)`와 `contents(forType:)`를 메인 큐에서 호출하므로
 /// 내부 상태는 메인 스레드에서만 접근한다(UIDocument는 nonisolated 클래스라 컴파일러가 강제하지 않는다).
-final class NotebookDocument: UIDocument, @unchecked Sendable {
-    var manifest: NotebookManifest
-    var pdfDocument: PDFDocument
-    private(set) var drawings: [UUID: PKDrawing] = [:]
+public final class NotebookDocument: UIDocument, @unchecked Sendable {
+    public var manifest: NotebookManifest
+    public var pdfDocument: PDFDocument
+    public private(set) var drawings: [UUID: PKDrawing] = [:]
     private var drawingsDirty: Set<UUID> = []
     private var pdfDirty = true
     private var thumbnailDirty = true
@@ -17,19 +17,19 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
     /// 이 세션에서 녹음한 파일의 임시 URL. 저장이 백그라운드에서 끝나기 전에도 재생할 수 있도록 유지한다.
     private var sessionAudio: [String: URL] = [:]
     /// 페이지 객체용 이미지 데이터. 키는 `images/` 안의 파일 이름.
-    private(set) var images: [String: Data] = [:]
+    public private(set) var images: [String: Data] = [:]
     private var imagesDirty: Set<String> = []
     private var imageCache: [String: UIImage] = [:]
     /// 마지막으로 읽거나 쓴 패키지 래퍼. 변경된 항목만 교체해 iCloud 전송량을 줄인다.
     private var rootWrapper: FileWrapper?
 
-    init(fileURL: URL, manifest: NotebookManifest, pdfDocument: PDFDocument) {
+    public init(fileURL: URL, manifest: NotebookManifest, pdfDocument: PDFDocument) {
         self.manifest = manifest
         self.pdfDocument = pdfDocument
         super.init(fileURL: fileURL)
     }
 
-    override init(fileURL: URL) {
+    public override init(fileURL: URL) {
         self.manifest = NotebookManifest(title: fileURL.deletingPathExtension().lastPathComponent)
         self.pdfDocument = PDFDocument()
         super.init(fileURL: fileURL)
@@ -37,18 +37,18 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
 
     // MARK: - Drawing access
 
-    func drawing(for pageID: UUID) -> PKDrawing {
+    public func drawing(for pageID: UUID) -> PKDrawing {
         drawings[pageID] ?? PKDrawing()
     }
 
-    func setDrawing(_ drawing: PKDrawing, for pageID: UUID) {
+    public func setDrawing(_ drawing: PKDrawing, for pageID: UUID) {
         drawings[pageID] = drawing
         drawingsDirty.insert(pageID)
         if manifest.pages.first?.id == pageID { thumbnailDirty = true }
         touch()
     }
 
-    func markPDFChanged() {
+    public func markPDFChanged() {
         normalizePDF()
         pdfDirty = true
         thumbnailDirty = true
@@ -62,23 +62,23 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
         pdfDocument = fresh
     }
 
-    func markManifestChanged() {
+    public func markManifestChanged() {
         touch()
     }
 
     /// 첫 페이지의 객체가 바뀌면 라이브러리 썸네일을 다시 만든다.
-    func invalidateThumbnail(for pageID: UUID) {
+    public func invalidateThumbnail(for pageID: UUID) {
         if manifest.pages.first?.id == pageID { thumbnailDirty = true }
     }
 
-    func addRecording(_ info: RecordingInfo, temporaryURL: URL) {
+    public func addRecording(_ info: RecordingInfo, temporaryURL: URL) {
         manifest.recordings.append(info)
         pendingAudio[info.fileName] = temporaryURL
         sessionAudio[info.fileName] = temporaryURL
         touch()
     }
 
-    func removeRecording(_ info: RecordingInfo) {
+    public func removeRecording(_ info: RecordingInfo) {
         manifest.recordings.removeAll { $0.id == info.id }
         pendingAudio[info.fileName] = nil
         sessionAudio[info.fileName] = nil
@@ -92,7 +92,7 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
     // MARK: - Images
 
     /// 이미지를 패키지에 추가하고 파일 이름을 돌려준다.
-    func addImage(_ data: Data, fileExtension: String = "jpg") -> String {
+    public func addImage(_ data: Data, fileExtension: String = "jpg") -> String {
         let name = "\(UUID().uuidString).\(fileExtension)"
         images[name] = data
         imagesDirty.insert(name)
@@ -100,14 +100,14 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
         return name
     }
 
-    func image(named name: String) -> UIImage? {
+    public func image(named name: String) -> UIImage? {
         if let cached = imageCache[name] { return cached }
         guard let data = images[name], let img = UIImage(data: data) else { return nil }
         imageCache[name] = img
         return img
     }
 
-    func removeImage(named name: String) {
+    public func removeImage(named name: String) {
         images[name] = nil
         imageCache[name] = nil
         imagesDirty.remove(name)
@@ -118,7 +118,7 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
     }
 
     /// 녹음 파일 URL. 이 세션에서 녹음한 파일은 임시 복사본을, 그 외에는 패키지 안의 파일을 돌려준다.
-    func audioURL(for info: RecordingInfo) -> URL {
+    public func audioURL(for info: RecordingInfo) -> URL {
         if let temp = sessionAudio[info.fileName], FileManager.default.fileExists(atPath: temp.path) { return temp }
         return fileURL
             .appendingPathComponent(NotebookPackage.audioDirectory)
@@ -132,7 +132,7 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
 
     // MARK: - Page management
 
-    func insertTemplatePage(_ template: PaperTemplate, at index: Int) {
+    public func insertTemplatePage(_ template: PaperTemplate, at index: Int) {
         let page = TemplateRenderer.makePDFPage(
             template: template, size: manifest.pageSize, color: manifest.paperColor)
         pdfDocument.insert(page, at: index)
@@ -140,7 +140,7 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
         markPDFChanged()
     }
 
-    func removePage(at index: Int) {
+    public func removePage(at index: Int) {
         guard manifest.pages.count > 1, manifest.pages.indices.contains(index) else { return }
         let info = manifest.pages.remove(at: index)
         drawings[info.id] = nil
@@ -157,7 +157,7 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
         markPDFChanged()
     }
 
-    func movePage(from source: Int, to destination: Int) {
+    public func movePage(from source: Int, to destination: Int) {
         guard source != destination,
               manifest.pages.indices.contains(source),
               (0...manifest.pages.count).contains(destination) else { return }
@@ -171,7 +171,7 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
     }
 
     /// 화이트보드 페이지를 더 큰 크기로 다시 만든다. 필기는 좌표가 유지된다.
-    func growWhiteboard(to size: CGSize) {
+    public func growWhiteboard(to size: CGSize) {
         guard manifest.kind == .whiteboard, let info = manifest.pages.first else { return }
         let page = TemplateRenderer.makePDFPage(
             template: info.template ?? .dotted, size: size, color: manifest.paperColor)
@@ -182,11 +182,11 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
 
     // MARK: - UIDocument
 
-    override func contents(forType typeName: String) throws -> Any {
+    public override func contents(forType typeName: String) throws -> Any {
         try buildWrapper()
     }
 
-    override func load(fromContents contents: Any, ofType typeName: String?) throws {
+    public override func load(fromContents contents: Any, ofType typeName: String?) throws {
         guard let wrapper = contents as? FileWrapper else {
             throw CocoaError(.fileReadCorruptFile)
         }
@@ -308,11 +308,11 @@ final class NotebookDocument: UIDocument, @unchecked Sendable {
         directory.addFileWrapper(wrapper)
     }
 
-    static func drawingFileName(for pageID: UUID) -> String {
+    public static func drawingFileName(for pageID: UUID) -> String {
         "\(pageID.uuidString).\(NotebookPackage.drawingExtension)"
     }
 
-    override func handleError(_ error: any Error, userInteractionPermitted: Bool) {
+    public override func handleError(_ error: any Error, userInteractionPermitted: Bool) {
         NSLog("NotebookDocument error: \(error)")
         super.handleError(error, userInteractionPermitted: userInteractionPermitted)
     }

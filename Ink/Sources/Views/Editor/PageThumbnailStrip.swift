@@ -1,5 +1,6 @@
 import SwiftUI
 import PencilKit
+import InkCore
 
 /// 하단 페이지 썸네일 목록. 탭으로 이동, 길게 눌러 삭제/이동.
 struct PageThumbnailStrip: View {

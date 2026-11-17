@@ -1,6 +1,7 @@
 import SwiftUI
 import PDFKit
 import PencilKit
+import InkCore
 
 /// PDFView 위에 페이지마다 PKCanvasView를 오버레이로 얹는 편집 캔버스.
 struct PDFCanvasView: UIViewRepresentable {

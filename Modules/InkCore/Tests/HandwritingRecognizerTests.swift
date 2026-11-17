@@ -1,6 +1,6 @@
 import Testing
 import UIKit
-@testable import Ink
+@testable import InkCore
 
 struct HandwritingRecognizerTests {
     @Test func recognizesRenderedText() async throws {

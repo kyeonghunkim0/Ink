@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import InkCore
 
 /// 탭으로 열린 노트들을 전체 화면으로 보여 준다.
 struct EditorTabsView: View {

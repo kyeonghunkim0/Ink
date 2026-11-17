@@ -1,5 +1,6 @@
 import UIKit
 import PencilKit
+import InkCore
 
 /// 페이지 객체 편집 이벤트를 모델로 전달한다.
 @MainActor

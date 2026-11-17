@@ -3,9 +3,9 @@ import Vision
 import CoreGraphics
 
 /// Vision으로 손글씨를 텍스트로 인식한다.
-enum HandwritingRecognizer {
+public enum HandwritingRecognizer {
     /// 이미지 전체를 인식해 줄 단위 텍스트를 합쳐 돌려준다.
-    static func recognize(_ image: CGImage) async throws -> String {
+    public static func recognize(_ image: CGImage) async throws -> String {
         try await withCheckedThrowingContinuation { cont in
             let request = VNRecognizeTextRequest { request, error in
                 if let error { cont.resume(throwing: error); return }

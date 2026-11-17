@@ -3,7 +3,7 @@ import Foundation
 import PDFKit
 import PencilKit
 import UIKit
-@testable import Ink
+@testable import InkCore
 
 struct NotebookManifestTests {
     @Test func roundTripsThroughJSON() throws {

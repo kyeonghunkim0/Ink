@@ -4,38 +4,44 @@ import PDFKit
 import UIKit
 
 /// 라이브러리 항목(폴더 또는 노트북).
-struct LibraryItem: Identifiable, Hashable, Sendable {
-    enum Kind: Sendable { case folder, notebook }
+public struct LibraryItem: Identifiable, Hashable, Sendable {
+    public enum Kind: Sendable { case folder, notebook }
 
-    var url: URL
-    var kind: Kind
-    var modifiedAt: Date
+    public var url: URL
+    public var kind: Kind
+    public var modifiedAt: Date
     /// iCloud에서 아직 내려받지 않은 항목.
-    var isDownloading: Bool = false
+    public var isDownloading: Bool = false
 
-    var id: URL { url }
-    var name: String { kind == .notebook ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent }
+    public init(url: URL, kind: Kind, modifiedAt: Date, isDownloading: Bool = false) {
+        self.url = url; self.kind = kind; self.modifiedAt = modifiedAt; self.isDownloading = isDownloading
+    }
+
+    public var id: URL { url }
+    public var name: String { kind == .notebook ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent }
 }
 
 /// 노트북 생성 옵션.
-struct NewNotebookOptions: Sendable {
-    var title = "새 노트"
-    var kind: NotebookKind = .notebook
-    var template: PaperTemplate = .lined
-    var paperSize: PaperSize = .a4
-    var paperColor: PaperColor = .white
-    var isLandscape = true
+public struct NewNotebookOptions: Sendable {
+    public var title = "새 노트"
+    public var kind: NotebookKind = .notebook
+    public var template: PaperTemplate = .lined
+    public var paperSize: PaperSize = .a4
+    public var paperColor: PaperColor = .white
+    public var isLandscape = true
+
+    public init() {}
 }
 
 /// iCloud(또는 로컬 폴백) 문서 저장소. 폴더는 실제 디렉터리, 노트북은 `.inknote` 패키지다.
 @MainActor
 @Observable
-final class DocumentStore {
-    private(set) var rootURL: URL?
-    private(set) var isICloud = false
+public final class DocumentStore {
+    public private(set) var rootURL: URL?
+    public private(set) var isICloud = false
     /// 파일 시스템이 바뀔 때마다 증가. 뷰는 이 값을 관찰해 목록을 다시 읽는다.
-    private(set) var changeCounter = 0
-    private(set) var lastError: String?
+    public private(set) var changeCounter = 0
+    public private(set) var lastError: String?
 
     @ObservationIgnored private var query: NSMetadataQuery?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
@@ -48,7 +54,9 @@ final class DocumentStore {
         var isDownloaded: Bool
     }
 
-    func start() async {
+    public init() {}
+
+    public func start() async {
         guard rootURL == nil else { return }
         // 콜드 스타트 직후에는 컨테이너 조회가 일시적으로 nil을 돌려줄 수 있어 몇 번 더 시도한다.
         var container: URL?
@@ -86,17 +94,17 @@ final class DocumentStore {
     }
 
     /// 로컬 폴백 상태에서 iCloud가 나중에 사용 가능해지면 iCloud 저장소로 전환한다.
-    func recheckContainer() async {
+    public func recheckContainer() async {
         guard !isICloud, let container = await Self.ubiquityContainer() else { return }
         useICloud(container)
         changeCounter += 1
     }
 
-    func refresh() { changeCounter += 1 }
+    public func refresh() { changeCounter += 1 }
 
     // MARK: - Listing
 
-    func items(in folder: URL) -> [LibraryItem] {
+    public func items(in folder: URL) -> [LibraryItem] {
         let fm = FileManager.default
         guard let urls = try? fm.contentsOfDirectory(
             at: folder,
@@ -148,7 +156,7 @@ final class DocumentStore {
         }
     }
 
-    func allFolders() -> [URL] {
+    public func allFolders() -> [URL] {
         guard let rootURL else { return [] }
         var result: [URL] = [rootURL]
         var queue: [URL] = [rootURL]
@@ -162,7 +170,7 @@ final class DocumentStore {
     }
 
     /// 노트북의 검색용 텍스트(제목 + 손글씨 인식 결과 + 텍스트 상자). 매니페스트를 읽어 만든다.
-    nonisolated static func searchableText(forNotebookAt url: URL) -> String {
+    public nonisolated static func searchableText(forNotebookAt url: URL) -> String {
         let manifestURL = url.appendingPathComponent(NotebookPackage.manifestName)
         guard let data = try? Data(contentsOf: manifestURL),
               let manifest = try? NotebookManifest.decode(data) else { return "" }
@@ -174,20 +182,20 @@ final class DocumentStore {
         return parts.joined(separator: "\n")
     }
 
-    func displayName(for folder: URL) -> String {
+    public func displayName(for folder: URL) -> String {
         folder == rootURL ? "모든 노트" : folder.lastPathComponent
     }
 
     // MARK: - Creation
 
-    func createFolder(named name: String, in folder: URL) throws {
+    public func createFolder(named name: String, in folder: URL) throws {
         let url = uniqueURL(in: folder, baseName: name, pathExtension: nil)
         try coordinatedWrite(url) { try FileManager.default.createDirectory(at: $0, withIntermediateDirectories: true) }
         changeCounter += 1
     }
 
     @discardableResult
-    func createNotebook(_ options: NewNotebookOptions, in folder: URL) async throws -> URL {
+    public func createNotebook(_ options: NewNotebookOptions, in folder: URL) async throws -> URL {
         var manifest = NotebookManifest(title: options.title)
         manifest.kind = options.kind
         manifest.paperSize = options.paperSize
@@ -212,7 +220,7 @@ final class DocumentStore {
 
     /// PDF 또는 Office 파일을 노트북으로 가져온다.
     @discardableResult
-    func importFile(at sourceURL: URL, in folder: URL) async throws -> URL {
+    public func importFile(at sourceURL: URL, in folder: URL) async throws -> URL {
         let data = try PDFImporter.readData(from: sourceURL)
         let title = sourceURL.deletingPathExtension().lastPathComponent
         let ext = sourceURL.pathExtension.lowercased()
@@ -248,7 +256,7 @@ final class DocumentStore {
 
     // MARK: - Mutation
 
-    func rename(_ item: LibraryItem, to newName: String) throws {
+    public func rename(_ item: LibraryItem, to newName: String) throws {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != item.name else { return }
         let folder = item.url.deletingLastPathComponent()
@@ -261,7 +269,7 @@ final class DocumentStore {
         changeCounter += 1
     }
 
-    func delete(_ item: LibraryItem) throws {
+    public func delete(_ item: LibraryItem) throws {
         var coordinatorError: NSError?
         var inner: Error?
         NSFileCoordinator().coordinate(writingItemAt: item.url, options: .forDeleting, error: &coordinatorError) { url in
@@ -273,7 +281,7 @@ final class DocumentStore {
         changeCounter += 1
     }
 
-    func move(_ item: LibraryItem, to folder: URL) throws {
+    public func move(_ item: LibraryItem, to folder: URL) throws {
         guard item.url.deletingLastPathComponent() != folder, !folder.path.hasPrefix(item.url.path + "/") else { return }
         let ext: String? = item.kind == .notebook ? NotebookPackage.fileExtension : nil
         let target = uniqueURL(in: folder, baseName: item.name, pathExtension: ext)
@@ -281,7 +289,7 @@ final class DocumentStore {
         changeCounter += 1
     }
 
-    func duplicate(_ item: LibraryItem) throws {
+    public func duplicate(_ item: LibraryItem) throws {
         let folder = item.url.deletingLastPathComponent()
         let ext: String? = item.kind == .notebook ? NotebookPackage.fileExtension : nil
         let target = uniqueURL(in: folder, baseName: item.name + " 복사본", pathExtension: ext)
@@ -388,14 +396,14 @@ final class DocumentStore {
 }
 
 /// 무한 화이트보드 크기 정책.
-enum WhiteboardGeometry {
-    static let initialSize = CGSize(width: 2400, height: 2400)
-    static let growthStep: CGFloat = 1200
-    static let edgeMargin: CGFloat = 300
-    static let maxDimension: CGFloat = 16_000
+public enum WhiteboardGeometry {
+    public static let initialSize = CGSize(width: 2400, height: 2400)
+    public static let growthStep: CGFloat = 1200
+    public static let edgeMargin: CGFloat = 300
+    public static let maxDimension: CGFloat = 16_000
 
     /// 필기 범위가 가장자리에 가까우면 더 큰 크기를 돌려준다.
-    static func grownSize(current: CGSize, drawingBounds: CGRect) -> CGSize? {
+    public static func grownSize(current: CGSize, drawingBounds: CGRect) -> CGSize? {
         guard !drawingBounds.isNull, !drawingBounds.isEmpty else { return nil }
         var size = current
         if drawingBounds.maxX > current.width - edgeMargin { size.width = min(current.width + growthStep, maxDimension) }

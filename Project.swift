@@ -80,10 +80,31 @@ let project = Project(
             sources: ["Ink/Sources/**"],
             resources: ["Ink/Resources/**"],
             entitlements: .file(path: "Ink/Ink.entitlements"),
+            dependencies: [.target(name: "InkCore")],
             settings: .settings(base: [
                 "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
                 "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
             ])
+        ),
+        // 문서 모델과 서비스(저장소·변환·내보내기·녹음). SwiftUI 뷰는 두지 않는다.
+        .target(
+            name: "InkCore",
+            destinations: [.iPad],
+            product: .framework,
+            bundleId: "\(bundleIDPrefix).InkCore",
+            deploymentTargets: .iOS("18.0"),
+            infoPlist: .default,
+            sources: ["Modules/InkCore/Sources/**"]
+        ),
+        .target(
+            name: "InkCoreTests",
+            destinations: [.iPad],
+            product: .unitTests,
+            bundleId: "\(bundleIDPrefix).InkCoreTests",
+            deploymentTargets: .iOS("18.0"),
+            infoPlist: .default,
+            sources: ["Modules/InkCore/Tests/**"],
+            dependencies: [.target(name: "InkCore")]
         ),
         .target(
             name: "InkTests",
@@ -110,8 +131,8 @@ let project = Project(
         .scheme(
             name: "Ink",
             shared: true,
-            buildAction: .buildAction(targets: ["Ink"]),
-            testAction: .targets(["InkTests", "InkUITests"]),
+            buildAction: .buildAction(targets: ["InkCore", "Ink"]),
+            testAction: .targets(["InkCoreTests", "InkTests", "InkUITests"]),
             runAction: .runAction(executable: "Ink")
         ),
     ]
