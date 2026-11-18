@@ -68,18 +68,30 @@ struct EditorTabStrip: View {
 /// 노트북 편집 화면. 모델은 라우터가 보관하며, 여기서는 로드만 한다.
 struct EditorView: View {
     let model: EditorModel
+    @Environment(Router.self) private var router
+    @Environment(DocumentStore.self) private var store
 
     var body: some View {
         Group {
             if model.isLoaded {
                 EditorContent(model: model)
             } else if let error = model.loadError {
-                ContentUnavailableView(error, systemImage: "exclamationmark.triangle")
+                ContentUnavailableView {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                } actions: {
+                    // 열 수 없는 노트의 탭이 남지 않게 닫고, 라이브러리 목록도 다시 읽는다.
+                    Button("탭 닫기") {
+                        router.closeTab(model.url)
+                        store.refresh()
+                    }
+                    .adaptiveProminentButtonStyle()
+                }
             } else {
                 ProgressView("여는 중…")
             }
         }
-        .task {
+        // 실패한 모델이 새 모델로 바뀌면(같은 URL이라 뷰 정체성은 그대로) 다시 로드한다.
+        .task(id: ObjectIdentifier(model)) {
             if !model.isLoaded, model.loadError == nil { await model.load() }
         }
         .onDisappear {
@@ -336,4 +348,6 @@ func formatDuration(_ interval: TimeInterval) -> String {
     NavigationStack {
         EditorView(model: EditorModel(url: FileManager.default.temporaryDirectory.appendingPathComponent("Preview.inknote")))
     }
+    .environment(Router(sessions: EditorSessions()))
+    .environment(DocumentStore())
 }

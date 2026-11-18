@@ -47,8 +47,12 @@ public final class DocumentStore {
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     /// 메타데이터 쿼리가 알고 있는 iCloud 항목. 데몬이 아직 디렉터리에 항목을 만들지 않았을 때 목록을 보강한다.
     @ObservationIgnored private var knownUbiquitousItems: [String: UbiquitousItem] = [:]
+    /// 우리가 직접 옮기거나 지운 경로와 그 시각. 쿼리 인덱스가 늦게 따라와 옛 경로를 다시 보고해도 목록에 되살리지 않는다.
+    @ObservationIgnored private var removedPaths: [String: Date] = [:]
+    /// 쿼리가 옛 경로를 끝내 지우지 않는 경우를 대비한 묘비 유지 시간.
+    static let removedPathLifetime: TimeInterval = 120
 
-    private struct UbiquitousItem {
+    struct UbiquitousItem {
         var url: URL
         var isFolder: Bool
         var isDownloaded: Bool
@@ -140,15 +144,17 @@ public final class DocumentStore {
             }
         }
         // 메타데이터 쿼리에는 있는데 디렉터리 목록에 아직 없는 항목(동기화 직후)을 내려받는 중으로 보탠다.
+        // 디스크에 없는 항목은 열 수 없으므로 쿼리가 "내려받음"이라 해도 항상 내려받는 중(탭 불가)으로 둔다.
+        // 쿼리 인덱스가 늦어 지운·옮긴 옛 경로를 다시 보고하면 열 수 없는 유령 노트가 되기 때문이다.
         let folderPath = folder.standardizedFileURL.path
         let listed = Set(items.map { $0.url.standardizedFileURL.path })
-        for known in knownUbiquitousItems.values
+        for (path, known) in knownUbiquitousItems
         where known.url.deletingLastPathComponent().standardizedFileURL.path == folderPath
-            && !listed.contains(known.url.standardizedFileURL.path) {
+            && !listed.contains(path) && !isRemoved(path) {
             let isNotebook = known.url.pathExtension == NotebookPackage.fileExtension
             guard isNotebook || known.isFolder else { continue }
             items.append(LibraryItem(url: known.url, kind: isNotebook ? .notebook : .folder,
-                                     modifiedAt: .distantPast, isDownloading: !known.isDownloaded))
+                                     modifiedAt: .distantPast, isDownloading: true))
         }
         return items.sorted {
             if $0.kind != $1.kind { return $0.kind == .folder }
@@ -189,8 +195,9 @@ public final class DocumentStore {
     // MARK: - Creation
 
     public func createFolder(named name: String, in folder: URL) throws {
-        let url = uniqueURL(in: folder, baseName: name, pathExtension: nil)
+        let url = uniqueURL(in: folder, baseName: name, pathExtension: nil, fallbackName: "새 폴더")
         try coordinatedWrite(url) { try FileManager.default.createDirectory(at: $0, withIntermediateDirectories: true) }
+        unmarkRemoved(url)
         changeCounter += 1
     }
 
@@ -246,10 +253,14 @@ public final class DocumentStore {
 
     private func saveNewNotebook(manifest: NotebookManifest, pdf: PDFDocument, in folder: URL) async throws -> URL {
         let url = uniqueURL(in: folder, baseName: manifest.title, pathExtension: NotebookPackage.fileExtension)
+        // "새 노트"가 이미 있으면 파일은 "새 노트 2"가 된다. 편집기 제목·검색·내보내기 이름이 라이브러리와 같도록 맞춘다.
+        var manifest = manifest
+        manifest.title = url.deletingPathExtension().lastPathComponent
         let document = NotebookDocument(fileURL: url, manifest: manifest, pdfDocument: pdf)
         let ok = await withCheckedContinuation { cont in document.save(to: url, for: .forCreating) { cont.resume(returning: $0) } }
         guard ok else { throw CocoaError(.fileWriteUnknown) }
         await withCheckedContinuation { cont in document.close { _ in cont.resume() } }
+        unmarkRemoved(url)
         changeCounter += 1
         return url
     }
@@ -258,13 +269,15 @@ public final class DocumentStore {
 
     public func rename(_ item: LibraryItem, to newName: String) throws {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != item.name else { return }
+        // 다듬은 이름이 지금 이름과 같으면(".수학" → "수학") 자기 자신과 겹쳐 "수학 2"가 되지 않게 그대로 둔다.
+        guard !trimmed.isEmpty, Self.sanitizedFileName(trimmed, fallback: item.name) != item.name else { return }
         let folder = item.url.deletingLastPathComponent()
         let ext: String? = item.kind == .notebook ? NotebookPackage.fileExtension : nil
-        let target = uniqueURL(in: folder, baseName: trimmed, pathExtension: ext)
+        let target = uniqueURL(in: folder, baseName: trimmed, pathExtension: ext, fallbackName: item.name)
         try coordinatedMove(from: item.url, to: target)
         if item.kind == .notebook {
-            try updateManifestTitle(at: target, title: trimmed)
+            // 이름이 겹치거나 다듬어졌으면 실제 파일 이름을 제목으로 쓴다.
+            try updateManifestTitle(at: target, title: target.deletingPathExtension().lastPathComponent, newIdentity: false)
         }
         changeCounter += 1
     }
@@ -277,7 +290,7 @@ public final class DocumentStore {
         }
         if let coordinatorError { throw coordinatorError }
         if let inner { throw inner }
-        forgetUbiquitousItems(under: item.url)
+        markRemoved(item.url)
         changeCounter += 1
     }
 
@@ -289,35 +302,56 @@ public final class DocumentStore {
         changeCounter += 1
     }
 
-    public func duplicate(_ item: LibraryItem) throws {
+    /// 항목을 같은 폴더에 복제한다. 원본 노트가 편집기에 열려 있어도 된다.
+    /// 조정 읽기는 열린 UIDocument에 저장을 요청하고, UIDocument는 메인 스레드에서 저장하므로
+    /// 메인 스레드에서 코디네이터를 돌리면 교착된다. 그래서 복사는 백그라운드에서 한다.
+    public func duplicate(_ item: LibraryItem) async throws {
         let folder = item.url.deletingLastPathComponent()
         let ext: String? = item.kind == .notebook ? NotebookPackage.fileExtension : nil
         let target = uniqueURL(in: folder, baseName: item.name + " 복사본", pathExtension: ext)
-        var coordinatorError: NSError?
-        var inner: Error?
-        NSFileCoordinator().coordinate(readingItemAt: item.url, options: [], writingItemAt: target, options: .forReplacing, error: &coordinatorError) { src, dst in
-            do { try FileManager.default.copyItem(at: src, to: dst) } catch { inner = error }
-        }
-        if let coordinatorError { throw coordinatorError }
-        if let inner { throw inner }
+        let source = item.url
+        let result: Result<Void, Error> = await Task.detached(priority: .userInitiated) {
+            var coordinatorError: NSError?
+            var inner: Error?
+            NSFileCoordinator().coordinate(readingItemAt: source, options: [], writingItemAt: target, options: .forReplacing, error: &coordinatorError) { src, dst in
+                do { try FileManager.default.copyItem(at: src, to: dst) } catch { inner = error }
+            }
+            if let coordinatorError { return .failure(coordinatorError) }
+            if let inner { return .failure(inner) }
+            return .success(())
+        }.value
+        try result.get()
+        unmarkRemoved(target)
         if item.kind == .notebook {
-            try? updateManifestTitle(at: target, title: target.deletingPathExtension().lastPathComponent)
+            try? updateManifestTitle(at: target, title: target.deletingPathExtension().lastPathComponent, newIdentity: true)
         }
         changeCounter += 1
     }
 
     // MARK: - Helpers
 
-    private func updateManifestTitle(at notebookURL: URL, title: String) throws {
+    /// 매니페스트 제목을 바꾼다. 복제본은 원본과 구분되도록 `newIdentity`로 새 ID를 받는다.
+    private func updateManifestTitle(at notebookURL: URL, title: String, newIdentity: Bool) throws {
         let manifestURL = notebookURL.appendingPathComponent(NotebookPackage.manifestName)
         var manifest = try NotebookManifest.decode(try Data(contentsOf: manifestURL))
         manifest.title = title
-        manifest.id = UUID()
+        if newIdentity { manifest.id = UUID() }
         try coordinatedWrite(manifestURL) { try manifest.encoded().write(to: $0, options: .atomic) }
     }
 
-    private func uniqueURL(in folder: URL, baseName: String, pathExtension: String?) -> URL {
-        let safe = baseName.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+    /// 파일 시스템에 쓸 수 있는 이름으로 다듬는다. '.'으로 시작하면 숨김 파일이 되어 목록에서 사라지므로 앞의 점을 뗀다.
+    nonisolated static func sanitizedFileName(_ name: String, fallback: String) -> String {
+        var safe = name
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        while safe.hasPrefix(".") { safe.removeFirst() }
+        safe = safe.trimmingCharacters(in: .whitespacesAndNewlines)
+        return safe.isEmpty ? fallback : safe
+    }
+
+    func uniqueURL(in folder: URL, baseName: String, pathExtension: String?, fallbackName: String = "새 노트") -> URL {
+        let safe = Self.sanitizedFileName(baseName, fallback: fallbackName)
         func make(_ suffix: Int) -> URL {
             let name = suffix == 0 ? safe : "\(safe) \(suffix + 1)"
             var url = folder.appendingPathComponent(name)
@@ -325,8 +359,19 @@ public final class DocumentStore {
             return url
         }
         var i = 0
-        while FileManager.default.fileExists(atPath: make(i).path) { i += 1 }
+        while isNameTaken(make(i)) { i += 1 }
         return make(i)
+    }
+
+    /// 디스크에 있거나, 아직 내려받지 않은 iCloud 항목(플레이스홀더·메타데이터)이 같은 이름을 쓰고 있으면 사용 중이다.
+    /// 내려받지 않은 같은 이름의 노트 자리에 새로 만들면 iCloud 충돌이 나거나 한쪽이 덮어써진다.
+    private func isNameTaken(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: url.path) { return true }
+        let placeholder = url.deletingLastPathComponent().appendingPathComponent(".\(url.lastPathComponent).icloud")
+        if fm.fileExists(atPath: placeholder.path) { return true }
+        let path = url.standardizedFileURL.path
+        return knownUbiquitousItems[path] != nil && !isRemoved(path)
     }
 
     private func coordinatedWrite(_ url: URL, _ body: (URL) throws -> Void) throws {
@@ -347,16 +392,40 @@ public final class DocumentStore {
         }
         if let coordinatorError { throw coordinatorError }
         if let inner { throw inner }
-        forgetUbiquitousItems(under: from)
+        markRemoved(from)
+        unmarkRemoved(to)
     }
 
-    /// 우리가 직접 옮기거나 지운 경로를 메타데이터 스냅샷에서 바로 뺀다.
-    /// 쿼리 갱신(0.5초 배칭)이 오기 전까지 옛 경로가 "내려받는 중" 항목으로 그려져 노트가 두 개로 보이는 것을 막는다.
-    private func forgetUbiquitousItems(under url: URL) {
+    // MARK: - Removed-path tombstones
+
+    /// 우리가 직접 옮기거나 지운 경로를 기억하고 메타데이터 스냅샷에서도 바로 뺀다.
+    /// 쿼리 갱신은 인덱스가 따라오기 전의 옛 경로를 다시 담아 올 수 있으므로, 스냅샷을 지우는 것만으로는 부족하다.
+    /// `removedPathLifetime`이 지나면 묘비를 치운다. 인덱스가 아직 옛 경로를 모르다가 뒤늦게 보고하는 경우도 있어 쿼리 결과만으로는 치우지 않는다.
+    func markRemoved(_ url: URL, at date: Date = Date()) {
         let path = url.standardizedFileURL.path
-        knownUbiquitousItems = knownUbiquitousItems.filter { key, _ in
-            key != path && !key.hasPrefix(path + "/")
-        }
+        removedPaths[path] = date
+        knownUbiquitousItems = knownUbiquitousItems.filter { key, _ in !Self.isSameOrInside(key, path) }
+    }
+
+    /// 같은 경로에 새 항목을 만들었으면 묘비를 치운다(지운 뒤 같은 이름으로 다시 만든 경우).
+    private func unmarkRemoved(_ url: URL) {
+        let path = url.standardizedFileURL.path
+        removedPaths = removedPaths.filter { key, _ in !Self.isSameOrInside(key, path) && !Self.isSameOrInside(path, key) }
+    }
+
+    private func isRemoved(_ path: String) -> Bool {
+        removedPaths.keys.contains { Self.isSameOrInside(path, $0) }
+    }
+
+    private nonisolated static func isSameOrInside(_ path: String, _ ancestor: String) -> Bool {
+        path == ancestor || path.hasPrefix(ancestor + "/")
+    }
+
+    /// 쿼리 결과를 반영한다. 묘비가 있는 경로는 버리고, 오래된 묘비는 치운다.
+    func applyMetadataSnapshot(_ known: [String: UbiquitousItem], now: Date = Date()) {
+        removedPaths = removedPaths.filter { _, removedAt in now.timeIntervalSince(removedAt) < Self.removedPathLifetime }
+        knownUbiquitousItems = known.filter { path, _ in !isRemoved(path) }
+        changeCounter += 1
     }
 
     private func startMetadataQuery() {
@@ -389,9 +458,8 @@ public final class DocumentStore {
                 url: url, isFolder: contentType == "public.folder",
                 isDownloaded: status != NSMetadataUbiquitousItemDownloadingStatusNotDownloaded)
         }
-        knownUbiquitousItems = known
         query.enableUpdates()
-        changeCounter += 1
+        applyMetadataSnapshot(known)
     }
 }
 

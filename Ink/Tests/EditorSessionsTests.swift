@@ -71,4 +71,20 @@ struct EditorSessionsTests {
         for _ in 0..<10 { await Task.yield() }
         #expect(sessions.openURLs == [a])
     }
+
+    /// 열기에 실패한 노트를 다시 열면 실패한 모델을 재사용하지 않고 새로 시도한다.
+    @Test func reopeningFailedNotebookRetries() async {
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent("없음-\(UUID().uuidString).inknote")
+        let router = Router(sessions: EditorSessions())
+        router.openEditor(missing)
+        let failed = router.editorModel(for: missing.normalizedFileURL)
+        await failed.load()
+        #expect(failed.didFailToLoad)
+
+        router.isEditorPresented = false
+        router.openEditor(missing)
+        let retried = router.editorModel(for: missing.normalizedFileURL)
+        #expect(retried !== failed)
+        #expect(!retried.didFailToLoad)
+    }
 }

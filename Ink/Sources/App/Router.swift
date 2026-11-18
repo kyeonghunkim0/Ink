@@ -44,6 +44,8 @@ final class Router {
         // 디렉터리 목록에서 온 URL은 끝에 '/'가 붙어 생성 시 URL과 달라진다. 같은 노트가 탭 두 개로 열리지 않도록 정규화한다.
         let url = url.normalizedFileURL
         sessions.claim(url, for: self)
+        // 전에 열다가 실패한 노트는 새로 시도한다.
+        sessions.discardFailedModel(for: url)
         if !openNotebooks.contains(url) { openNotebooks.append(url) }
         activeNotebook = url
         isEditorPresented = true

@@ -60,6 +60,8 @@ final class EditorModel {
     /// 손글씨 인식이 끝날 때마다 증가. 검색 결과 갱신에 사용.
     private(set) var recognitionVersion = 0
     @ObservationIgnored private var hasSecurityScope = false
+    /// 닫는 중이면 새 저장을 예약하지 않는다(닫기와 저장이 겹치지 않게).
+    @ObservationIgnored private var isClosing = false
     /// 줌 요청. 양수는 확대, 음수는 축소. 캔버스 뷰가 소비한다.
     private(set) var zoomRequest: (token: Int, delta: Int) = (0, 0)
 
@@ -97,22 +99,38 @@ final class EditorModel {
             }
             #endif
         } else {
-            loadError = "노트를 열 수 없습니다."
+            if hasSecurityScope {
+                url.stopAccessingSecurityScopedResource()
+                hasSecurityScope = false
+            }
+            loadError = FileManager.default.fileExists(atPath: url.path)
+                ? "노트를 열 수 없습니다."
+                : "노트를 찾을 수 없습니다. 삭제되었거나 이동되었을 수 있습니다."
         }
     }
 
+    /// 로드에 실패한 모델. 다시 열 때 새 모델로 바꿔 재시도한다.
+    var didFailToLoad: Bool { loadError != nil }
+
     func save() async {
-        guard let document, document.hasUnsavedChanges else { return }
-        let ok = await withCheckedContinuation { cont in document.save(to: url, for: .forOverwriting) { cont.resume(returning: $0) } }
+        guard !isClosing, let document, document.hasUnsavedChanges else { return }
+        // 열려 있는 동안 다른 기기에서 이름이 바뀌면 UIDocument는 새 경로를 따라간다.
+        // 처음 받은 `url`에 저장하면 옛 자리에 패키지를 다시 만들어 중복·유령 노트가 생긴다.
+        let target = document.fileURL
+        let ok = await withCheckedContinuation { cont in document.save(to: target, for: .forOverwriting) { cont.resume(returning: $0) } }
         if !ok { errorMessage = "저장에 실패했습니다." }
     }
 
     func close() async {
+        guard !isClosing else { return }
         saveTask?.cancel()
         recognitionTask?.cancel()
         if !recognitionDirty.isEmpty { await recognizeDirtyPages() }
         if recorder.isRecording { finishRecording() }
         recorder.stopPlayback()
+        // 여기부터는 새 저장을 예약하지 않는다. 남은 변경은 `UIDocument.close`가 저장한다.
+        isClosing = true
+        saveTask?.cancel()
         guard let document else { return }
         await withCheckedContinuation { cont in document.close { _ in cont.resume() } }
         self.document = nil
@@ -145,6 +163,7 @@ final class EditorModel {
     }
 
     private func scheduleSave() {
+        guard !isClosing else { return }
         saveTask?.cancel()
         saveTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2))
@@ -404,7 +423,8 @@ final class EditorModel {
             title: "녹음 \(number)", startedAt: result.startedAt, duration: result.duration,
             pageID: pageID(at: currentPageIndex))
         document.addRecording(info, temporaryURL: result.url)
-        Task { await save() }
+        // 닫는 중이면 `UIDocument.close`가 녹음까지 저장한다.
+        if !isClosing { Task { await save() } }
     }
 
     func play(_ recording: RecordingInfo) {
@@ -442,7 +462,7 @@ final class EditorModel {
                   let png = image.pngData() else { throw CocoaError(.fileWriteUnknown) }
             return try Exporter.writeTemporary(data: png, name: "\(base) - \(currentPageIndex + 1).png")
         case .package:
-            return url
+            return document.fileURL
         }
     }
 }

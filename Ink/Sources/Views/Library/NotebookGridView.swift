@@ -266,7 +266,9 @@ struct NotebookGridView: View {
     @ViewBuilder
     private func contextMenu(for item: LibraryItem) -> some View {
         Button { renameText = item.name; renamingItem = item } label: { Label("이름 변경", systemImage: "pencil") }
-        Button { attempt { try store.duplicate(item) } } label: { Label("복제", systemImage: "plus.square.on.square") }
+        Button {
+            Task { do { try await store.duplicate(item) } catch { errorMessage = error.localizedDescription } }
+        } label: { Label("복제", systemImage: "plus.square.on.square") }
         Button { moveRequest = MoveRequest(items: [item]) } label: { Label("이동", systemImage: "folder") }
         Divider()
         Button(role: .destructive) {
@@ -291,6 +293,12 @@ struct NotebookGridView: View {
 
     private func open(_ item: LibraryItem) {
         guard !item.isDownloading else { return }
+        // 목록을 읽은 뒤 밖에서 지워지거나 옮겨진 항목은 열지 않고 목록을 다시 읽는다.
+        guard FileManager.default.fileExists(atPath: item.url.path) else {
+            errorMessage = "“\(item.name)”을(를) 찾을 수 없습니다. 삭제되었거나 이동되었을 수 있습니다."
+            store.refresh()
+            return
+        }
         switch item.kind {
         case .folder: router.navigate(to: .folder(item.url))
         case .notebook: router.openEditor(item.url)

@@ -32,6 +32,7 @@ struct LibraryView: View {
         .fullScreenCover(isPresented: $router.isEditorPresented) {
             EditorTabsView()
                 .environment(router)
+                .environment(store)
         }
         .onChange(of: selectedFolder) { _, _ in router.popToRoot() }
         // 로컬 폴백에서 iCloud로 전환되면 루트가 바뀌므로 선택 폴더를 새 루트로 되돌린다.

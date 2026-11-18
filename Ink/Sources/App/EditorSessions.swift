@@ -41,6 +41,13 @@ final class EditorSessions {
 
     func existingModel(for url: URL) -> EditorModel? { models[url] }
 
+    /// 로드에 실패한 모델을 버린다. 다음 `model(for:)`가 새 모델을 만들어 다시 연다.
+    /// 실패한 모델을 계속 재사용하면 파일이 정상으로 돌아와도 탭을 닫기 전까지 "열 수 없음"만 보인다.
+    func discardFailedModel(for url: URL) {
+        guard let model = models[url], model.didFailToLoad else { return }
+        models[url] = nil
+    }
+
     /// 문서를 저장·해제한다. 해제는 비동기로 진행되며 `closingTasks`로 기다릴 수 있다.
     func close(_ url: URL) {
         guard let model = models.removeValue(forKey: url) else { return }
