@@ -45,6 +45,7 @@
 - 새 SwiftUI 작업 전 Skill `swiftui`, 글래스 UI 작업 전 Skill `glass` 호출
 - 리뷰: `/review <기준 커밋>` (표준 = 이 문서, 스펙 = 플랜 파일)
 - 세션 인계: `/handoff`
+- TestFlight 업로드: `/testflight [버전] [--skip-tests]` (사전 점검 → 단위 테스트 → `fastlane ios beta`)
 - `ios-clean`은 gstack DebugBridge 전용이며 이 프로젝트에는 해당 없음
 - 커밋은 사용자가 요청할 때만, 메시지는 `/caveman-commit`
 
