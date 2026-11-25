@@ -65,7 +65,7 @@ let project = Project(
             "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
             "CODE_SIGN_STYLE": "Automatic",
             "DEVELOPMENT_TEAM": "2N94PZ8R58",
-            "MARKETING_VERSION": "0.1.0",
+            "MARKETING_VERSION": "1.0.1",
             "CURRENT_PROJECT_VERSION": "1",
         ]
     ),
